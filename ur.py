@@ -1,0 +1,118 @@
+
+import numpy as np
+
+n_player = 2
+
+# all start on first and end on last
+n_board = 14
+board = np.zeros((n_player, n_board + 2))
+ind_safe = sorted([8])
+ind_rosette = sorted([4, 8, 14])
+ind_common = sorted(range(5, 13))
+n_pieces = 7
+
+player = 0  # starting player
+board[:, 0] = n_pieces
+
+
+def throw():
+    return np.random.randint(0, 2, size=4).sum().item()
+
+
+def get_legal_moves(board, player, dice):
+    if dice == 0:
+        return []
+
+    enemies = [p for p in range(n_player) if p != player]
+    inds = np.nonzero(board[player, :-1])[-1].tolist()
+
+    moves = []
+    for start in inds:
+        end = start + dice
+        if start > max(ind_common) and end > n_board + 1:
+            # Player needs exact throw for last two squares
+            continue
+        end = min(end, n_board + 1)
+        if board[[player], end].sum() > 0:
+            # Player has a piece there
+            continue
+        if end in ind_safe and board[enemies, end].sum() > 0:
+            # Ennemy on safe rosette
+            continue
+        moves.append((start, end))
+
+    return moves
+
+
+def determine_winner(board):
+    # Empty if no winners
+    return np.nonzero(board[:, -1] == n_pieces)[0].tolist()
+
+
+def execute_move(board, player, start, end):
+    enemies = [p for p in range(n_player) if p != player]
+    if end in ind_common and board[enemies, end].sum() > 0:
+        enemy = np.nonzero(board[:, end])[0].item()
+        board[enemy, end] -= 1
+        board[enemy, 0] += 1
+    board[player, start] -= 1
+    board[player, end] += 1
+    return board
+
+
+def print_board(board):
+    # separator = " | "
+    separator = ""
+    rows = ["" for _ in range(n_player + 1)]
+    for i in ind_common:
+        player = np.nonzero(board[:, i])[0]
+        if len(player) > 0:
+            rows[-1] += f"{int(player[0].item())}"
+        elif i in ind_rosette:
+            rows[-1] += "R"
+        else:
+            rows[-1] += "*"
+    for player in range(n_player):
+        inds = list(range(max(ind_common) + 1, board.shape[-1])) + list(range(min(ind_common)))
+        for i in inds:
+            if i in [0, n_board + 1]:
+                rows[player] += f"{int(board[player, i])}"
+            elif board[player, i] > 0:
+                rows[player] += f"{int(player)}"
+            elif i in ind_rosette:
+                rows[player] += "R"
+            else:
+                rows[player] += "*"
+        rows[player] = (" " * (len(ind_common) - len(ind_common))) + rows[player]
+        rows[player] = rows[player][::-1]
+
+    rows[-2], rows[-1] = rows[-1], rows[-2]
+    print("\n".join(rows))
+
+
+winner = []
+while not winner:
+    print_board(board)
+    dice = throw()
+    print(f"Player {player} threw {dice}.")
+    # TODO Play again on rosettes
+    moves = get_legal_moves(board, player, dice)
+    moves = {k: m for k, m in enumerate(moves)}
+    if moves:
+        while True:
+            move = input(f"Select move {moves} for Player {player}: ")
+            try:
+                move = int(move)
+                if move in range(len(moves)):
+                    break
+            except:
+                print("Invalid entry.")
+        move = moves[move]
+        board = execute_move(board, player, *move)
+    else:
+        print(f"Player {player} has no legal moves.")
+
+    player = (player + 1) % n_player
+    winner = determine_winner(board)
+
+print(f"Player {winner} won.")
