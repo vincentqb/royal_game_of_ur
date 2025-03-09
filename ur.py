@@ -4,19 +4,17 @@ import numpy as np
 import pandas as pd
 from tqdm import trange
 
-n_player = 2
-
-# all start on first and end on last
-n_board = 14
-ind_safe = sorted([8])
-ind_rosette = sorted([4, 8, 14])
-ind_common = sorted(range(5, 13))
-n_pieces = 7
+N_BOARD = 14  # all start on first (0) and end on last (-1)
+SAFE = sorted([8])
+ROSETTE = sorted([4, 8, 14])
+COMMON = sorted(range(5, 13))
+N_PIECES = 7
+N_PLAYER = 2
 
 
 def create_board():
-    board = np.zeros((n_player, n_board + 2))
-    board[:, 0] = n_pieces
+    board = np.zeros((N_PLAYER, N_BOARD + 2))
+    board[:, 0] = N_PIECES
     return board
 
 
@@ -28,20 +26,20 @@ def get_legal_moves(board, player, dice):
     if dice == 0:
         return []
 
-    enemies = [p for p in range(n_player) if p != player]
+    enemies = [p for p in range(N_PLAYER) if p != player]
     inds = np.nonzero(board[player, :-1])[-1].tolist()
 
     moves = []
     for start in inds:
         end = start + dice
-        if start > max(ind_common) and end > n_board + 1:
+        if start > max(COMMON) and end > N_BOARD + 1:
             # Player needs exact throw for last two squares
             continue
-        end = min(end, n_board + 1)
-        if end < n_board + 1 and board[[player], end].sum() > 0:
+        end = min(end, N_BOARD + 1)
+        if end < N_BOARD + 1 and board[[player], end].sum() > 0:
             # Player has a piece there
             continue
-        if end in ind_safe and board[enemies, end].sum() > 0:
+        if end in SAFE and board[enemies, end].sum() > 0:
             # Ennemy on safe rosette
             continue
         moves.append((start, end))
@@ -51,12 +49,12 @@ def get_legal_moves(board, player, dice):
 
 def determine_winner(board):
     # Empty if no winners
-    return np.nonzero(board[:, -1] == n_pieces)[0].tolist()
+    return np.nonzero(board[:, -1] == N_PIECES)[0].tolist()
 
 
 def execute_move(board, player, start, end):
-    enemies = [p for p in range(n_player) if p != player]
-    if end in ind_common and board[enemies, end].sum() > 0:
+    enemies = [p for p in range(N_PLAYER) if p != player]
+    if end in COMMON and board[enemies, end].sum() > 0:
         enemy = np.nonzero(board[:, end])[0].item()
         board[enemy, end] -= 1
         board[enemy, 0] += 1
@@ -68,37 +66,37 @@ def execute_move(board, player, start, end):
 def print_board(board):
     # separator = " | "
     separator = ""
-    rows = ["" for _ in range(n_player + 1)]
-    for i in ind_common:
+    rows = ["" for _ in range(N_PLAYER + 1)]
+    for i in COMMON:
         player = np.nonzero(board[:, i])[0]
         if len(player) > 0:
             rows[-1] += f"{int(player[0].item())}"
-        elif i in ind_rosette:
+        elif i in ROSETTE:
             rows[-1] += "R"
         else:
             rows[-1] += "*"
-    for player in range(n_player):
-        inds = list(range(max(ind_common) + 1, board.shape[-1])) + list(range(min(ind_common)))
+    for player in range(N_PLAYER):
+        inds = list(range(max(COMMON) + 1, board.shape[-1])) + list(range(min(COMMON)))
         for i in inds:
-            if i in [0, n_board + 1]:
+            if i in [0, N_BOARD + 1]:
                 rows[player] += f"{int(board[player, i])}"
             elif board[player, i] > 0:
                 rows[player] += f"{int(player)}"
-            elif i in ind_rosette:
+            elif i in ROSETTE:
                 rows[player] += "R"
             else:
                 rows[player] += "*"
-        rows[player] = (" " * (len(ind_common) - len(ind_common))) + rows[player]
+        rows[player] = (" " * (len(COMMON) - len(COMMON))) + rows[player]
         rows[player] = rows[player][::-1]
 
     rows[-2], rows[-1] = rows[-1], rows[-2]
     print("\n".join(rows))
 
 
-def get_player_move(moves):
+def policy_human(*, board, player, moves):
     moves = {k: m for k, m in enumerate(moves)}
     while True:
-        move = input(f"Select move {moves}: ")
+        move = input(f"Select move {moves} for Player {player}: ")
         try:
             move = int(move)
             if move in range(len(moves)):
@@ -108,19 +106,29 @@ def get_player_move(moves):
     return moves[move]
 
 
-def play_first(moves):
+def policy_first(*, moves, **_):
     return moves[0]
 
 
-def play_last(moves):
+def policy_last(*, moves, **_):
     return moves[-1]
 
 
-def play_random(moves):
+def policy_random(*, moves, **_):
     return random.choice(moves)
 
 
-def play(get_move_for_player, verbose=False):
+def policy_aggressive(*, board, player, moves):
+    enemies = [p for p in range(N_PLAYER) if p != player]
+    for move in moves[::-1]:
+        if move[-1] in COMMON and board[enemies, move[-1]].sum() > 0:
+            return move
+        if move[-1] in ROSETTE:
+            return move
+    return move
+
+
+def play(policies, verbose=False):
     player = 0  # starting player
     board = create_board()
 
@@ -134,26 +142,26 @@ def play(get_move_for_player, verbose=False):
         if verbose:
             print(f"Player {player} threw {dice}.")
         if moves:
-            move = get_move_for_player[player](moves)
+            move = policies[player](board=board, player=player, moves=moves)
             board = execute_move(board, player, *move)
-            if move[-1] in ind_rosette:
+            if move[-1] in ROSETTE:
                 # Play again on rosettes
                 continue
         elif verbose:
             print(f"Player {player} has no legal moves.")
 
-        player = (player + 1) % n_player
+        player = (player + 1) % N_PLAYER
         winner = determine_winner(board)
         iteration += 1
 
         if iteration > 1000:
-            return [-1]
+            return -1
 
     return winner[0]
 
 
 def compare():
-    available = ["play_first", "play_last", "play_random"]
+    available = ["policy_first", "policy_last", "policy_random", "policy_aggressive"]
 
     results = []
     for _ in trange(2000, ncols=0):
@@ -167,7 +175,7 @@ def compare():
             }
         )
 
-    results = pd.DataFrame(results, columns=list(range(n_player)) + ["winner_id", "winner_name"])
+    results = pd.DataFrame(results, columns=list(range(N_PLAYER)) + ["winner_id", "winner_name"])
 
     results_winner = [
         results[results["winner_id"] == p]
@@ -175,7 +183,7 @@ def compare():
         .reset_index()
         .pivot(index=0, columns=1, values="count")
         .fillna(0)
-        for p in range(n_player)
+        for p in range(N_PLAYER)
     ]
 
     p = results_winner[0] + results_winner[1].transpose()
