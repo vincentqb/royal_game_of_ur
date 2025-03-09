@@ -1,4 +1,3 @@
-
 import numpy as np
 
 n_player = 2
@@ -90,25 +89,31 @@ def print_board(board):
     print("\n".join(rows))
 
 
+def get_player_move(moves):
+    moves = {k: m for k, m in enumerate(moves)}
+    while True:
+        move = input(f"Select move {moves} for Player {player}: ")
+        try:
+            move = int(move)
+            if move in range(len(moves)):
+                break
+        except:
+            print("Invalid entry.")
+    return moves[move]
+
+
 winner = []
 while not winner:
     print_board(board)
     dice = throw()
-    print(f"Player {player} threw {dice}.")
-    # TODO Play again on rosettes
     moves = get_legal_moves(board, player, dice)
-    moves = {k: m for k, m in enumerate(moves)}
+    print(f"Player {player} threw {dice}.")
     if moves:
-        while True:
-            move = input(f"Select move {moves} for Player {player}: ")
-            try:
-                move = int(move)
-                if move in range(len(moves)):
-                    break
-            except:
-                print("Invalid entry.")
-        move = moves[move]
+        move = get_player_move(moves)
         board = execute_move(board, player, *move)
+        if move[-1] in ind_rosette:
+            # Play again on rosettes
+            continue
     else:
         print(f"Player {player} has no legal moves.")
 
