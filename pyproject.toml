@@ -11,9 +11,9 @@ classifiers = [
 description = "Royal Game of Ur"
 name = "ur"
 readme = "README.md"
-requires-python = ">=3.9"
 version = "0.1.0"
-requires = [
+requires-python = ">=3.12"
+dependencies = [
     "numpy",
 ]
 
