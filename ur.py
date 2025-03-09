@@ -37,7 +37,7 @@ def get_legal_moves(board, player, dice):
             # Player needs exact throw for last two squares
             continue
         end = min(end, n_board + 1)
-        if board[[player], end].sum() > 0:
+        if end < n_board + 1 and board[[player], end].sum() > 0:
             # Player has a piece there
             continue
         if end in ind_safe and board[enemies, end].sum() > 0:
@@ -97,7 +97,7 @@ def print_board(board):
 def get_player_move(moves):
     moves = {k: m for k, m in enumerate(moves)}
     while True:
-        move = input(f"Select move {moves} for Player {player}: ")
+        move = input(f"Select move {moves}: ")
         try:
             move = int(move)
             if move in range(len(moves)):
@@ -159,7 +159,8 @@ def compare():
 
 
 if __name__ == "__main__":
-    winner = play([get_player_move, get_player_move])
+    # winner = play([get_player_move, get_player_move])
+    winner = play([play_last, play_last], verbose=True)
     print(f"Player {winner} won.")
 
-    results = compare()
+    # results = compare()
