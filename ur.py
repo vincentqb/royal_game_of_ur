@@ -1,8 +1,9 @@
 import random
+from concurrent.futures import ProcessPoolExecutor, as_completed
 
 import numpy as np
 import pandas as pd
-from tqdm import trange
+from tqdm import tqdm
 
 N_BOARD = 14  # all start on first (0) and end on last (-1)
 SAFE = sorted([8])
@@ -160,21 +161,36 @@ def play(policies, verbose=False):
     return winner[0]
 
 
+def parallel_map(func, args, max_workers=None):
+    """Applies func to items in args (list of tuples), preserving order."""
+    if max_workers is None or max_workers >= 0:
+        with ProcessPoolExecutor(max_workers=max_workers) as executor:
+            futures = [executor.submit(func, *arg) for arg in args]
+            for future in tqdm(as_completed(futures), total=len(args), ncols=0):
+                yield future.result()
+    else:
+        for arg in tqdm(args, ncols=0):
+            yield func(*arg)
+
+
+def compare_play_wrapper(play, selected):
+    winner = play([eval(s) for s in selected])
+    return {
+        **{k: v for k, v in enumerate(selected)},
+        "winner_id": winner,
+        "winner_name": selected[winner],
+    }
+
+
 def compare():
     available = ["policy_first", "policy_last", "policy_random", "policy_aggressive"]
 
-    results = []
-    for _ in trange(2000, ncols=0):
+    tasks = []
+    for _ in range(2000):
         selected = random.choices(available, k=2)
-        winner = play([eval(s) for s in selected])
-        results.append(
-            {
-                **{k: v for k, v in enumerate(selected)},
-                "winner_id": winner,
-                "winner_name": selected[winner],
-            }
-        )
+        tasks.append([play, selected])
 
+    results = list(parallel_map(compare_play_wrapper, tasks))
     results = pd.DataFrame(results, columns=list(range(N_PLAYER)) + ["winner_id", "winner_name"])
 
     results_winner = [
