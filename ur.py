@@ -1,3 +1,5 @@
+import random
+
 import numpy as np
 
 n_player = 2
@@ -104,6 +106,18 @@ def get_player_move(moves):
     return moves[move]
 
 
+def play_first(moves):
+    return moves[0]
+
+
+def play_last(moves):
+    return moves[-1]
+
+
+def play_random(moves):
+    return random.choice(moves)
+
+
 def play(get_move, verbose=False):
     player = 0  # starting player
     board = create_board()
@@ -130,5 +144,6 @@ def play(get_move, verbose=False):
     return winner
 
 
-winner = play(get_player_move)
-print(f"Player {winner} won.")
+if __name__ == "__main__":
+    winner = play(get_player_move)
+    print(f"Player {winner} won.")
