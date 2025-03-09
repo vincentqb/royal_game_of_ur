@@ -66,8 +66,6 @@ def execute_move(board, player, start, end):
 
 
 def print_board(board):
-    # separator = " | "
-    separator = ""
     rows = ["" for _ in range(N_PLAYER + 1)]
     for i in COMMON:
         player = np.nonzero(board[:, i])[0]
@@ -101,7 +99,7 @@ def policy_human(*, board, player, moves):
         move = input(f"Select move {moves} for Player {player}: ")
         try:
             move = int(move)
-            if move in range(len(moves)):
+            if move in moves:
                 break
         except:
             print("Invalid entry.")
