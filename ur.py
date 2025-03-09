@@ -4,14 +4,16 @@ n_player = 2
 
 # all start on first and end on last
 n_board = 14
-board = np.zeros((n_player, n_board + 2))
 ind_safe = sorted([8])
 ind_rosette = sorted([4, 8, 14])
 ind_common = sorted(range(5, 13))
 n_pieces = 7
 
-player = 0  # starting player
-board[:, 0] = n_pieces
+
+def create_board():
+    board = np.zeros((n_player, n_board + 2))
+    board[:, 0] = n_pieces
+    return board
 
 
 def throw():
@@ -102,22 +104,31 @@ def get_player_move(moves):
     return moves[move]
 
 
-winner = []
-while not winner:
-    print_board(board)
-    dice = throw()
-    moves = get_legal_moves(board, player, dice)
-    print(f"Player {player} threw {dice}.")
-    if moves:
-        move = get_player_move(moves)
-        board = execute_move(board, player, *move)
-        if move[-1] in ind_rosette:
-            # Play again on rosettes
-            continue
-    else:
-        print(f"Player {player} has no legal moves.")
+def play(get_move, verbose=False):
+    player = 0  # starting player
+    board = create_board()
 
-    player = (player + 1) % n_player
-    winner = determine_winner(board)
+    winner = []
+    while not winner:
+        print_board(board)
+        dice = throw()
+        moves = get_legal_moves(board, player, dice)
+        if verbose:
+            print(f"Player {player} threw {dice}.")
+        if moves:
+            move = get_move(moves)
+            board = execute_move(board, player, *move)
+            if move[-1] in ind_rosette:
+                # Play again on rosettes
+                continue
+        elif verbose:
+            print(f"Player {player} has no legal moves.")
 
+        player = (player + 1) % n_player
+        winner = determine_winner(board)
+
+    return winner
+
+
+winner = play(get_player_move)
 print(f"Player {winner} won.")
