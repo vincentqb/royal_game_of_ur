@@ -118,7 +118,7 @@ def play_random(moves):
     return random.choice(moves)
 
 
-def play(get_move, verbose=False):
+def play(get_move_for_player, verbose=False):
     player = 0  # starting player
     board = create_board()
 
@@ -130,7 +130,7 @@ def play(get_move, verbose=False):
         if verbose:
             print(f"Player {player} threw {dice}.")
         if moves:
-            move = get_move(moves)
+            move = get_move_for_player[player](moves)
             board = execute_move(board, player, *move)
             if move[-1] in ind_rosette:
                 # Play again on rosettes
@@ -145,5 +145,5 @@ def play(get_move, verbose=False):
 
 
 if __name__ == "__main__":
-    winner = play(get_player_move)
+    winner = play([get_player_move, get_player_move])
     print(f"Player {winner} won.")
