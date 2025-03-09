@@ -1,6 +1,7 @@
 import random
 
 import numpy as np
+from tqdm import trange
 
 n_player = 2
 
@@ -124,7 +125,8 @@ def play(get_move_for_player, verbose=False):
 
     winner = []
     while not winner:
-        print_board(board)
+        if verbose:
+            print_board(board)
         dice = throw()
         moves = get_legal_moves(board, player, dice)
         if verbose:
@@ -144,6 +146,20 @@ def play(get_move_for_player, verbose=False):
     return winner
 
 
+def compare():
+    available = ["play_first", "play_last", "play_random"]
+
+    results = []
+    for _ in trange(1000):
+        selected = random.sample(available, 2)
+        winner = play([eval(s) for s in selected])
+        results.append((*selected, selected[winner]))
+
+    return results
+
+
 if __name__ == "__main__":
     winner = play([get_player_move, get_player_move])
     print(f"Player {winner} won.")
+
+    results = compare()
