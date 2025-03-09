@@ -1,6 +1,7 @@
 import random
 
 import numpy as np
+import pandas as pd
 from tqdm import trange
 
 n_player = 2
@@ -155,11 +156,30 @@ def compare():
     available = ["play_first", "play_last", "play_random"]
 
     results = []
-    for _ in trange(1000):
-        selected = random.sample(available, 2)
+    for _ in trange(2000, ncols=0):
+        selected = random.choices(available, k=2)
         winner = play([eval(s) for s in selected])
-        results.append((*selected, selected[winner]))
+        results.append(
+            {
+                **{k: v for k, v in enumerate(selected)},
+                "winner_id": winner,
+                "winner_name": selected[winner],
+            }
+        )
 
+    results = pd.DataFrame(results, columns=list(range(n_player)) + ["winner_id", "winner_name"])
+
+    results_winner = [
+        results[results["winner_id"] == p]
+        .value_counts()
+        .reset_index()
+        .pivot(index=0, columns=1, values="count")
+        .fillna(0)
+        for p in range(n_player)
+    ]
+
+    p = results_winner[0] + results_winner[1].transpose()
+    print(p / (p + p.transpose()))
     return results
 
 
