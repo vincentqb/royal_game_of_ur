@@ -5,15 +5,16 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm
 
-N_BOARD = 14  # all start on first (0) and end on last (-1)
+N_PLAYER = 2
+N_PIECE = 7
+N_BOARD = 14
 SAFE = sorted([8])
 ROSETTE = sorted([4, 8, 14])
 COMMON = sorted(range(5, 13))
-N_PIECE = 7
-N_PLAYER = 2
 
 
 def create_board():
+    # pieces start on [0] and end on [-1]
     board = np.zeros((N_PLAYER, N_BOARD + 2))
     board[:, 0] = N_PIECE
     return board
