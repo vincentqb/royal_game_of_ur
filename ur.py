@@ -193,6 +193,16 @@ def compare():
     results = list(parallel_map(compare_play_wrapper, tasks))
     results = pd.DataFrame(results, columns=list(range(N_PLAYER)) + ["winner_id", "winner_name"])
 
+    results_draw = (
+        results[results["winner_id"] == -1]
+        .value_counts()
+        .reset_index()
+        .pivot(index=0, columns=1, values="count")
+        .fillna(0)
+    )
+    print("Draws")
+    print(results_draw)
+
     results_winner = [
         results[results["winner_id"] == p]
         .value_counts()
@@ -203,6 +213,7 @@ def compare():
     ]
 
     p = results_winner[0] + results_winner[1].transpose()
+    print("Winner vs Loser")
     print(p / (p + p.transpose()))
     return results
 
