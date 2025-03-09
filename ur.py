@@ -124,6 +124,7 @@ def play(get_move_for_player, verbose=False):
     board = create_board()
 
     winner = []
+    iteration = 0
     while not winner:
         if verbose:
             print_board(board)
@@ -142,8 +143,12 @@ def play(get_move_for_player, verbose=False):
 
         player = (player + 1) % n_player
         winner = determine_winner(board)
+        iteration += 1
 
-    return winner
+        if iteration > 1000:
+            return [-1]
+
+    return winner[0]
 
 
 def compare():
@@ -159,8 +164,8 @@ def compare():
 
 
 if __name__ == "__main__":
+    # winner = play([play_last, play_last], verbose=True)
     # winner = play([get_player_move, get_player_move])
-    winner = play([play_last, play_last], verbose=True)
-    print(f"Player {winner} won.")
+    # print(f"Player {winner} won.")
 
-    # results = compare()
+    results = compare()
