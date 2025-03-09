@@ -9,13 +9,13 @@ N_BOARD = 14  # all start on first (0) and end on last (-1)
 SAFE = sorted([8])
 ROSETTE = sorted([4, 8, 14])
 COMMON = sorted(range(5, 13))
-N_PIECES = 7
+N_PIECE = 7
 N_PLAYER = 2
 
 
 def create_board():
     board = np.zeros((N_PLAYER, N_BOARD + 2))
-    board[:, 0] = N_PIECES
+    board[:, 0] = N_PIECE
     return board
 
 
@@ -50,7 +50,7 @@ def get_legal_moves(board, player, dice):
 
 def determine_winner(board):
     # Empty if no winners
-    return np.nonzero(board[:, -1] == N_PIECES)[0].tolist()
+    return np.nonzero(board[:, -1] == N_PIECE)[0].tolist()
 
 
 def execute_move(board, player, start, end):
