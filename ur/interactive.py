@@ -1,4 +1,5 @@
 import curses
+from time import sleep
 
 import numpy as np
 
@@ -67,6 +68,7 @@ def show_info(screen, msg):
     start_y = (height - ROWS * 2) // 2
     start_x = (width - COLS * 4) // 2
     screen.addstr(start_y - 1, start_x, msg)
+    screen.clrtoeol()
 
 
 def show_pieces(screen, board, current_piece, current_player):
@@ -79,11 +81,11 @@ def show_pieces(screen, board, current_piece, current_player):
     for player in range(N_PLAYER):
         pieces = np.nonzero(board[player, :-1])[-1].tolist()
         pieces2d = convert_to_2d(pieces, player=player)
+        pieces2d = [(start_y + p[0] * 2 + 1, start_x + p[1] * 4 + 2) for p in pieces2d]
         for i in range(len(pieces)):
-            piece_y, piece_x = start_y + pieces2d[i][0] * 2 + 1, start_x + pieces2d[i][1] * 4 + 2
             style = curses.A_REVERSE if player == current_player and pieces[i] == current_piece else curses.A_BOLD
             label = str(player) if 0 < i < N_BOARD else str(int(board[player][i].item()))
-            screen.addstr(piece_y, piece_x, label, style)
+            screen.addstr(pieces2d[i][0], pieces2d[i][1], label, style)
 
 
 def play(screen):
@@ -127,6 +129,7 @@ def play(screen):
                     board = execute_move(board, player, *move)
                     break
             if key == ord("q"):
+                show_info(screen, "Players quit.")
                 break
             if move[-1] in ROSETTE:
                 # Play again on rosettes
@@ -142,6 +145,8 @@ def play(screen):
         if iteration > 1000:
             show_info(screen, "Game is too long.")
             break
+    screen.refresh()
+    sleep(1)
 
 
 if __name__ == "__main__":
