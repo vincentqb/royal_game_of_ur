@@ -12,7 +12,6 @@ SAFE = sorted([8])
 ROSETTE = sorted([4, 8, 14])
 COMMON = sorted(range(5, 13))
 
-
 def create_board():
     # pieces start on [0] and end on [-1]
     board = np.zeros((N_PLAYER, N_BOARD + 2))
