@@ -15,82 +15,76 @@ from engine import (
     throw,
 )
 
-# Board size
-ROWS = N_PLAYER + 1
-COLS = len(COMMON)
-# Common row
-COMMON_ROW = 1
 
 
-def convert_to_2d(positions, player=None):
-    MAP = [i if i < COMMON_ROW else i + 1 for i in range(N_PLAYER)]
-    out = []
-    players = range(N_PLAYER) if player is None else range(player, player + 1)
-    for position in positions:
+class VisualBoard:
+    def __init__(self, screen):
+        curses.curs_set(0)  # Hide cursor
+        self.screen = screen
+        self.screen.erase()
+        # Get terminal size
+        height, width = screen.getmaxyx()
+        # Board size
+        self.ROWS = N_PLAYER + 1
+        self.COLS = len(COMMON)
+        # Set board start position (centered)
+        self.start_y = (height - self.ROWS * 2) // 2
+        self.start_x = (width - self.COLS * 4) // 2
+        # Common row
+        self.COMMON_ROW = 1
+
+
+    def map(self, position, player):
+        MAP = [i if i < self.COMMON_ROW else i + 1 for i in range(N_PLAYER)]
         if position in COMMON:
-            out.append((COMMON_ROW, position - min(COMMON)))
+            y = self.COMMON_ROW
+            x = position - min(COMMON)
         elif position < min(COMMON):
-            for p in players:
-                out.append((MAP[p], min(COMMON) - 1 - position))
+            y = MAP[player]
+            x = min(COMMON) - 1 - position
         elif position > max(COMMON):
-            for p in players:
-                out.append((MAP[p], min(COMMON) + 1 + N_BOARD - position))
-    return out
+            y = MAP[player]
+            x = min(COMMON) + 1 + N_BOARD - position
+        y = self.start_y + y * 2
+        x = self.start_x + x * 4
+        return y, x
 
+    def show_grid(self):
+        for row in range(self.ROWS):
+            for col in range(self.COLS):
+                if row != self.COMMON_ROW and col in range(min(COMMON) - 1, N_BOARD - len(COMMON)):
+                    continue
+                y, x = self.start_y + row * 2, self.start_x + col * 4
+                self.screen.addstr(y, x, "+---+")
+                self.screen.addstr(y + 1, x, "|   |")
+                self.screen.addstr(y + 2, x, "+---+")
 
-def show_board(screen):
-    # Get terminal size
-    height, width = screen.getmaxyx()
-    # Set board start position (centered)
-    start_y = (height - ROWS * 2) // 2
-    start_x = (width - COLS * 4) // 2
-    # Draw the board
-    for row in range(ROWS):
-        for col in range(COLS):
-            if row != COMMON_ROW and col in range(min(COMMON) - 1, N_BOARD - len(COMMON)):
-                continue
-            y, x = start_y + row * 2, start_x + col * 4
-            screen.addstr(y, x, "+---+")
-            screen.addstr(y + 1, x, "|   |")
-            screen.addstr(y + 2, x, "+---+")
+    def show_rosette(self):
+        for rosette in ROSETTE:
+            for player in range(N_PLAYER):
+                y, x = self.map(rosette, player)
+                self.screen.addstr(y + 1, x + 2, "★", curses.A_BOLD)
+    def show_board(self):
+        self.screen.erase()
+        self.show_grid()
+        self.show_rosette()
 
-            # Mark Rosettes
-            ROSETTE2D = set(convert_to_2d(ROSETTE))
-            assert ROSETTE2D == {(0, 0), (2, 0), (1, 3), (2, 6), (0, 6)}, f"got {ROSETTE2D=}"
-            if (row, col) in ROSETTE2D:
-                screen.addstr(y + 1, x + 2, "★", curses.A_BOLD)
+    def show_info(self, msg):
+        self.screen.addstr(self.start_y - 1, self.start_x, msg)
+        self.screen.clrtoeol()
 
-
-def show_info(screen, msg):
-    # Get terminal size
-    height, width = screen.getmaxyx()
-    # Set board start position (centered)
-    start_y = (height - ROWS * 2) // 2
-    start_x = (width - COLS * 4) // 2
-    screen.addstr(start_y - 1, start_x, msg)
-    screen.clrtoeol()
-
-
-def show_pieces(screen, board, current_piece, current_player):
-    # Get terminal size
-    height, width = screen.getmaxyx()
-    # Set board start position (centered)
-    start_y = (height - ROWS * 2) // 2
-    start_x = (width - COLS * 4) // 2
-
-    for player in range(N_PLAYER):
-        pieces = np.nonzero(board[player, :-1])[-1].tolist()
-        pieces2d = convert_to_2d(pieces, player=player)
-        pieces2d = [(start_y + p[0] * 2 + 1, start_x + p[1] * 4 + 2) for p in pieces2d]
-        for i in range(len(pieces)):
-            style = curses.A_REVERSE if player == current_player and pieces[i] == current_piece else curses.A_BOLD
-            label = str(player) if 0 < i < N_BOARD else str(int(board[player][i].item()))
-            screen.addstr(pieces2d[i][0], pieces2d[i][1], label, style)
+    def show_pieces(self, board, current_piece, current_player):
+        for player in range(N_PLAYER):
+            pieces = np.nonzero(board[player, :])[-1].tolist()
+            for i in range(len(pieces)):
+                y, x = self.map(pieces[i], player)
+                style = curses.A_REVERSE if player == current_player and pieces[i] == current_piece else curses.A_BOLD
+                label = str(player) if 0 < i < N_BOARD else str(int(board[player][i].item()))
+                self.screen.addstr(y + 1, x + 2, label, style)
+        self.screen.refresh()
 
 
 def play(screen):
-    curses.curs_set(0)  # Hide cursor
-    screen.erase()
 
     board = create_board()
 
@@ -98,21 +92,21 @@ def play(screen):
     player = 0  # Starting player
     iteration = 0
 
-    while True:
-        screen.erase()
+    visual = VisualBoard(screen)
 
-        show_board(screen)
+    while True:
+
+        visual.show_board()
 
         dice = throw()
         moves = get_legal_moves(board, player, dice)
 
-        show_info(screen, f"Player {player} threw {dice}.")
+        visual.show_info(f"Player {player} threw {dice}.")
 
         if moves:
             move_index = 0
             while True:
-                show_pieces(screen, board, moves[move_index][0], player)
-                screen.refresh()
+                visual.show_pieces(board, moves[move_index][0], player)
 
                 # Get user input
                 key = screen.getch()
@@ -129,7 +123,7 @@ def play(screen):
                     board = execute_move(board, player, *move)
                     break
             if key == ord("q"):
-                show_info(screen, "Players quit.")
+                visual.show_info("Players quit.")
                 break
             if move[-1] in ROSETTE:
                 # Play again on rosettes
@@ -138,12 +132,12 @@ def play(screen):
         player = (player + 1) % N_PLAYER
         winner = determine_winner(board)
         if winner:
-            show_info(screen, f"Player {player} won.")
+            visual.show_info(f"Player {player} won.")
             break
 
         iteration += 1
         if iteration > 1000:
-            show_info(screen, "Game is too long.")
+            visual.show_info("Game is too long.")
             break
     screen.refresh()
     sleep(1)
