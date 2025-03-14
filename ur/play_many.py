@@ -12,7 +12,7 @@ def parallel_map(func, args, max_workers=None):
     if max_workers is None or max_workers >= 0:
         with ProcessPoolExecutor(max_workers=max_workers) as executor:
             futures = [executor.submit(func, *arg) for arg in args]
-            for future in tqdm(as_completed(futures), total=len(args), ncols=0):
+            for future in tqdm(as_completed(futures), total=len(futures), ncols=0):
                 yield future.result()
     else:
         for arg in tqdm(args, ncols=0):
