@@ -2,8 +2,7 @@ import curses
 from time import sleep
 
 import numpy as np
-
-from engine import (
+from play_one import (
     COMMON,
     N_BOARD,
     N_PLAYER,
@@ -14,7 +13,6 @@ from engine import (
     get_legal_moves,
     throw,
 )
-
 
 
 class VisualBoard:
@@ -32,7 +30,6 @@ class VisualBoard:
         self.start_x = (width - self.COLS * 4) // 2
         # Common row
         self.COMMON_ROW = 1
-
 
     def map(self, position, player):
         MAP = [i if i < self.COMMON_ROW else i + 1 for i in range(N_PLAYER)]
@@ -64,6 +61,7 @@ class VisualBoard:
             for player in range(N_PLAYER):
                 y, x = self.map(rosette, player)
                 self.screen.addstr(y + 1, x + 2, "★", curses.A_BOLD)
+
     def show_board(self):
         self.screen.erase()
         self.show_grid()
@@ -85,7 +83,6 @@ class VisualBoard:
 
 
 def play(screen):
-
     board = create_board()
 
     winner = []
@@ -95,7 +92,6 @@ def play(screen):
     visual = VisualBoard(screen)
 
     while True:
-
         visual.show_board()
 
         dice = throw()
