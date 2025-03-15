@@ -17,9 +17,14 @@ from play_one import (
 
 class VisualBoard:
     def __init__(self, screen):
-        curses.curs_set(0)  # Hide cursor
         self.screen = screen
+        if self.screen is None:
+            return
+        curses.curs_set(0)  # Hide cursor
         self.screen.erase()
+
+        self.logs = []
+
         # Get terminal size
         height, width = screen.getmaxyx()
         # Board size
@@ -47,6 +52,8 @@ class VisualBoard:
         return y, x
 
     def show_grid(self):
+        if self.screen is None:
+            return
         for row in range(self.ROWS):
             for col in range(self.COLS):
                 if row != self.COMMON_ROW and col in range(min(COMMON) - 1, N_BOARD - len(COMMON)):
@@ -55,6 +62,7 @@ class VisualBoard:
                 self.screen.addstr(y, x, "+---+")
                 self.screen.addstr(y + 1, x, "|   |")
                 self.screen.addstr(y + 2, x, "+---+")
+        self.end_y = y + 2
 
     def show_rosette(self):
         for rosette in ROSETTE:
@@ -63,15 +71,25 @@ class VisualBoard:
                 self.screen.addstr(y + 1, x + 2, "★", curses.A_BOLD)
 
     def show_board(self):
+        if self.screen is None:
+            return
         self.screen.erase()
         self.show_grid()
         self.show_rosette()
 
     def show_info(self, msg):
-        self.screen.addstr(self.start_y - 1, self.start_x, msg)
+        if self.screen is None:
+            return
+        self.logs.append(msg)
+        self.logs = self.logs[-1:]
+        for i, msg in enumerate(self.logs[::-1]):
+            self.screen.addstr(self.end_y + 1 + i, self.start_x, msg)
+        # self.screen.addstr(self.start_y - 1, self.start_x, msg)
         self.screen.clrtoeol()
 
     def show_pieces(self, board, current_piece, current_player):
+        if self.interactive is False:
+            return
         for player in range(N_PLAYER):
             pieces = np.nonzero(board[player, :])[-1].tolist()
             for i in range(len(pieces)):
@@ -82,14 +100,32 @@ class VisualBoard:
         self.screen.refresh()
 
 
-def play(screen):
-    board = create_board()
+def policy_human(*, board, player, moves, visual, **_):
+    move_index = 0
+    while True:
+        visual.show_pieces(board, moves[move_index][0], player)
 
-    winner = []
-    player = 0  # Starting player
-    iteration = 0
+        # Get user input
+        key = visual.screen.getch()
+        if key == ord("q"):
+            raise RuntimeError("Players quit.")
+        elif key == 9:  # Tab key to cycle through pieces with legal moves
+            move_index = (move_index + 1) % len(moves)
+        elif key == curses.KEY_LEFT:
+            move_index = (move_index - 1) % len(moves)
+        elif key == curses.KEY_RIGHT:
+            move_index = (move_index + 1) % len(moves)
+        elif key == 10:  # Enter key to confirm move
+            return moves[int(move_index)]
 
+
+def play(policies, screen):
     visual = VisualBoard(screen)
+
+    player = 0  # Starting player
+    board = create_board()
+    winner = []
+    iteration = 0
 
     while True:
         visual.show_board()
@@ -100,27 +136,9 @@ def play(screen):
         visual.show_info(f"Player {player} threw {dice}.")
 
         if moves:
-            move_index = 0
-            while True:
-                visual.show_pieces(board, moves[move_index][0], player)
-
-                # Get user input
-                key = screen.getch()
-                if key == ord("q"):
-                    break
-                elif key == 9:  # Tab key to cycle through pieces with legal moves
-                    move_index = (move_index + 1) % len(moves)
-                elif key == curses.KEY_LEFT:
-                    move_index = (move_index - 1) % len(moves)
-                elif key == curses.KEY_RIGHT:
-                    move_index = (move_index + 1) % len(moves)
-                elif key == 10:  # Enter key to confirm move
-                    move = moves[int(move_index)]
-                    board = execute_move(board, player, *move)
-                    break
-            if key == ord("q"):
-                visual.show_info("Players quit.")
-                break
+            move = policy_human(board=board, player=player, moves=moves, visual=visual)
+            move = policies[player](board=board, player=player, moves=moves, visual=visual)
+            board = execute_move(board, player, *move)
             if move[-1] in ROSETTE:
                 # Play again on rosettes
                 continue
@@ -129,15 +147,19 @@ def play(screen):
         winner = determine_winner(board)
         if winner:
             visual.show_info(f"Player {player} won.")
-            break
+            return winner[0]
 
         iteration += 1
         if iteration > 1000:
             visual.show_info("Game is too long.")
-            break
-    screen.refresh()
+            return -1
+
+
+def play_human(screen):
+    winner = play([policy_human, policy_human])
     sleep(1)
+    return winner
 
 
 if __name__ == "__main__":
-    curses.wrapper(play)
+    curses.wrapper(play_human)

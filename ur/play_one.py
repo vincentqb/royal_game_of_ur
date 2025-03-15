@@ -9,6 +9,7 @@ SAFE = sorted([8])
 ROSETTE = sorted([4, 8, 14])
 COMMON = sorted(range(5, 13))
 
+
 def create_board():
     # pieces start on [0] and end on [-1]
     board = np.zeros((N_PLAYER, N_BOARD + 2))
@@ -127,9 +128,9 @@ def policy_aggressive(*, board, player, moves):
 def play(policies, verbose=False):
     player = 0  # starting player
     board = create_board()
-
     winner = []
     iteration = 0
+
     while not winner:
         if verbose:
             print_board(board)
@@ -148,8 +149,8 @@ def play(policies, verbose=False):
 
         player = (player + 1) % N_PLAYER
         winner = determine_winner(board)
-        iteration += 1
 
+        iteration += 1
         if iteration > 1000:
             return -1
 
