@@ -1,4 +1,6 @@
+import curses
 import random
+from time import sleep
 
 import numpy as np
 
@@ -62,45 +64,108 @@ def execute_move(board, player, start, end):
     return board
 
 
-def print_board(board):
-    rows = ["" for _ in range(N_PLAYER + 1)]
-    for i in COMMON:
-        player = np.nonzero(board[:, i])[0]
-        if len(player) > 0:
-            rows[-1] += f"{int(player[0].item())}"
-        elif i in ROSETTE:
-            rows[-1] += "R"
-        else:
-            rows[-1] += "*"
-    for player in range(N_PLAYER):
-        inds = list(range(max(COMMON) + 1, board.shape[-1])) + list(range(min(COMMON)))
-        for i in inds:
-            if i in [0, N_BOARD + 1]:
-                rows[player] += f"{int(board[player, i])}"
-            elif board[player, i] > 0:
-                rows[player] += f"{int(player)}"
-            elif i in ROSETTE:
-                rows[player] += "R"
-            else:
-                rows[player] += "*"
-        rows[player] = (" " * (len(COMMON) - len(COMMON))) + rows[player]
-        rows[player] = rows[player][::-1]
+class VisualBoard:
+    def __init__(self, screen):
+        self.screen = screen
+        if self.screen is None:
+            return
+        curses.curs_set(0)  # Hide cursor
+        self.screen.erase()
 
-    rows[-2], rows[-1] = rows[-1], rows[-2]
-    print("\n".join(rows))
+        self.logs = []
+
+        # Get terminal size
+        height, width = screen.getmaxyx()
+        # Board size
+        self.ROWS = N_PLAYER + 1
+        self.COLS = len(COMMON)
+        # Set board start position (centered)
+        self.start_y = (height - self.ROWS * 2) // 2
+        self.start_x = (width - self.COLS * 4) // 2
+        # Common row
+        self.COMMON_ROW = 1
+
+    def map(self, position, player):
+        MAP = [i if i < self.COMMON_ROW else i + 1 for i in range(N_PLAYER)]
+        if position in COMMON:
+            y = self.COMMON_ROW
+            x = position - min(COMMON)
+        elif position < min(COMMON):
+            y = MAP[player]
+            x = min(COMMON) - 1 - position
+        elif position > max(COMMON):
+            y = MAP[player]
+            x = min(COMMON) + 1 + N_BOARD - position
+        y = self.start_y + y * 2
+        x = self.start_x + x * 4
+        return y, x
+
+    def show_grid(self):
+        if self.screen is None:
+            return
+        for row in range(self.ROWS):
+            for col in range(self.COLS):
+                if row != self.COMMON_ROW and col in range(min(COMMON) - 1, N_BOARD - len(COMMON)):
+                    continue
+                y, x = self.start_y + row * 2, self.start_x + col * 4
+                self.screen.addstr(y, x, "+---+")
+                self.screen.addstr(y + 1, x, "|   |")
+                self.screen.addstr(y + 2, x, "+---+")
+        self.end_y = y + 2
+
+    def show_rosette(self):
+        for rosette in ROSETTE:
+            for player in range(N_PLAYER):
+                y, x = self.map(rosette, player)
+                self.screen.addstr(y + 1, x + 2, "★", curses.A_BOLD)
+
+    def show_board(self):
+        if self.screen is None:
+            return
+        self.screen.erase()
+        self.show_grid()
+        self.show_rosette()
+
+    def show_info(self, msg):
+        if self.screen is None:
+            return
+        self.logs.append(msg)
+        self.logs = self.logs[-1:]
+        for i, msg in enumerate(self.logs[::-1]):
+            self.screen.addstr(self.end_y + 1 + i, self.start_x, msg)
+        # self.screen.addstr(self.start_y - 1, self.start_x, msg)
+        self.screen.clrtoeol()
+
+    def show_pieces(self, board, current_piece, current_player):
+        if self.screen is None:
+            return
+        for player in range(N_PLAYER):
+            pieces = np.nonzero(board[player, :])[-1].tolist()
+            for i in range(len(pieces)):
+                y, x = self.map(pieces[i], player)
+                style = curses.A_REVERSE if player == current_player and pieces[i] == current_piece else curses.A_BOLD
+                label = str(player) if 0 < i < N_BOARD else str(int(board[player][i].item()))
+                self.screen.addstr(y + 1, x + 2, label, style)
+        self.screen.refresh()
 
 
-def policy_human(*, board, player, moves):
-    moves = {k: m for k, m in enumerate(moves)}
+def policy_human(*, board, player, moves, visual, **_):
+    move_index = 0
     while True:
-        move = input(f"Select move {moves} for Player {player}: ")
-        try:
-            move = int(move)
-            if move in moves:
-                break
-        except:
-            print("Invalid entry.")
-    return moves[move]
+        visual.show_pieces(board, moves[move_index][0], player)
+
+        # Get user input
+        key = visual.screen.getch()
+        if key == ord("q"):
+            return -1
+        elif key == 9:  # Tab key to cycle through pieces with legal moves
+            move_index = (move_index + 1) % len(moves)
+        elif key == curses.KEY_LEFT:
+            move_index = (move_index - 1) % len(moves)
+        elif key == curses.KEY_RIGHT:
+            move_index = (move_index + 1) % len(moves)
+        elif key == 10:  # Enter key to confirm move
+            return moves[int(move_index)]
 
 
 def policy_first(*, moves, **_):
@@ -125,38 +190,49 @@ def policy_aggressive(*, board, player, moves):
     return move
 
 
-def play(policies, verbose=False):
-    player = 0  # starting player
+def play(policies, screen=None):
+    visual = VisualBoard(screen)
+
+    player = 0  # Starting player
     board = create_board()
     winner = []
     iteration = 0
 
-    while not winner:
-        if verbose:
-            print_board(board)
+    while True:
+        visual.show_board()
+
         dice = throw()
         moves = get_legal_moves(board, player, dice)
-        if verbose:
-            print(f"Player {player} threw {dice}.")
+
+        visual.show_info(f"Player {player} threw {dice}.")
+
         if moves:
-            move = policies[player](board=board, player=player, moves=moves)
+            move = policies[player](board=board, player=player, moves=moves, visual=visual)
+            if move == -1:
+                visual.show_info("Players quit.")
+                return -1
             board = execute_move(board, player, *move)
             if move[-1] in ROSETTE:
                 # Play again on rosettes
                 continue
-        elif verbose:
-            print(f"Player {player} has no legal moves.")
 
         player = (player + 1) % N_PLAYER
         winner = determine_winner(board)
+        if winner:
+            visual.show_info(f"Player {player} won.")
+            return winner[0]
 
         iteration += 1
         if iteration > 1000:
+            visual.show_info("Game is too long.")
             return -1
 
-    return winner[0]
+
+def play_human(screen):
+    play([policy_human, policy_human], screen=screen)
+    screen.refresh()
+    sleep(1)
 
 
 if __name__ == "__main__":
-    winner = play([policy_human, policy_human])
-    print(f"Player {winner} won.")
+    curses.wrapper(play_human)
