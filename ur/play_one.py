@@ -189,6 +189,10 @@ def policy_aggressive(*, board, player, moves, **_):
     return move
 
 
+def flatten(board, player):
+    return np.concat([np.array([player], dtype=np.uint8), board.flatten()], dtype=np.uint8)
+
+
 def play(policies, return_boards=False, screen=None):
     visual = VisualBoard(screen)
 
@@ -216,7 +220,7 @@ def play(policies, return_boards=False, screen=None):
                     return -1
             execute_move(board, player, *move)
             if return_boards:
-                boards.append(np.concat([np.array([player], dtype=np.uint8), board.flatten()], dtype=np.uint8))
+                boards.append(flatten(board, player))
             if move[-1] in ROSETTE:
                 # Play again on rosettes
                 continue
