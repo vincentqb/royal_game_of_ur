@@ -106,6 +106,7 @@ def train():
         xs = torch.from_numpy(xs)
         ys = torch.from_numpy(ys)
         ys = torch.nn.functional.one_hot(ys, num_classes=N_PLAYER)
+        ys = 2 * (ys - 1/2)
         ys = ys.to(torch.float32)
 
         optimizer.zero_grad()
