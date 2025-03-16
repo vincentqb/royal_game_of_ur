@@ -14,13 +14,13 @@ COMMON = sorted(range(5, 13))
 
 def create_board():
     # pieces start on [0] and end on [-1]
-    board = np.zeros((N_PLAYER, N_BOARD + 2), dtype="uint8")
+    board = np.zeros((N_PLAYER, N_BOARD + 2), dtype=np.uint8)
     board[:, 0] = N_PIECE
     return board
 
 
 def throw():
-    return np.random.randint(0, 2, size=4, dtype="uint8").sum().item()
+    return np.random.randint(0, 2, size=4, dtype=np.uint8).sum().item()
 
 
 def get_legal_moves(board, player, dice):
@@ -211,12 +211,12 @@ def play(policies, return_boards=False, screen=None):
             if move == -1:
                 visual.show_info("Players quit.")
                 if return_boards:
-                    return -1, np.stack(boards)
+                    return -1, np.stack(boards, dtype=np.uint8)
                 else:
                     return -1
-            board = execute_move(board, player, *move)
+            execute_move(board, player, *move)
             if return_boards:
-                boards.append(np.concat([[player], board.flatten()]))
+                boards.append(np.concat([np.array([player], dtype=np.uint8), board.flatten()], dtype=np.uint8))
             if move[-1] in ROSETTE:
                 # Play again on rosettes
                 continue
@@ -226,7 +226,7 @@ def play(policies, return_boards=False, screen=None):
         if winner:
             visual.show_info(f"Player {player} won.")
             if return_boards:
-                return winner[0], np.stack(boards)
+                return winner[0], np.stack(boards, dtype=np.uint8)
             else:
                 return winner[0]
 
