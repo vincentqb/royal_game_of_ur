@@ -19,7 +19,7 @@ def parallel_map(func, args, max_workers=None):
             yield func(*arg)
 
 
-def compare_play_wrapper(play, selected):
+def compare_play_wrapper(selected):
     winner = play([getattr(play_one, s) for s in selected])
     return {
         **{k: v for k, v in enumerate(selected)},
@@ -32,9 +32,9 @@ def compare():
     available = ["policy_first", "policy_last", "policy_random", "policy_aggressive"]
 
     tasks = []
-    for _ in range(2000):
+    for _ in range(100):
         selected = random.choices(available, k=2)
-        tasks.append([play, selected])
+        tasks.append([selected])
 
     results = list(parallel_map(compare_play_wrapper, tasks))
     results = pd.DataFrame(results, columns=list(range(N_PLAYER)) + ["winner_id", "winner_name"])
