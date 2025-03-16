@@ -61,7 +61,6 @@ def execute_move(board, player, start, end):
         board[enemy, 0] += 1
     board[player, start] -= 1
     board[player, end] += 1
-    return board
 
 
 class VisualBoard:
