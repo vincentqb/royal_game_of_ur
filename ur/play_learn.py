@@ -8,15 +8,16 @@ from play_many import parallel_map
 from play_one import N_BOARD, N_PLAYER, execute_move, flatten, play
 
 
-def train_play_wrapper(selected):
-    winner, boards = play(list(selected.values()), return_boards=True)
+def train_play_wrapper(*policies):
+    names, funcs = zip(*policies)
+    winner, boards = play(funcs, return_boards=True)
     winners = np.repeat(winner, 1 if boards is None else boards.shape[0])
     return {
-        **{k: v for k, v in enumerate(selected)},
+        **{k: v for k, v in enumerate(names)},
         "boards": boards,
         "winners": winners,
         "winner_id": winner,
-        "winner_name": selected[winner],
+        "winner_name": names[winner],
     }
 
 
@@ -52,7 +53,7 @@ class Net(torch.nn.Module):
                 execute_move(board_, player, *move)
                 board_ = flatten(board_, player)
                 boards.append(board_)
-            boards = np.vstack(board, dtype=np.float32)
+            boards = np.vstack(boards, dtype=np.float32)
             boards = torch.from_numpy(boards)
             scores = self.forward(boards)
             scores = scores[:, player]
@@ -73,14 +74,13 @@ def compare(results):
     ]
 
     p = results_winner[0] + results_winner[1].transpose()
-    print("Winner vs Loser")
     print(p / (p + p.transpose()))
     return results
 
 
 def train():
     net = Net()
-    available = {
+    POLICIES = {
         "first": play_one.policy_first,
         "last": play_one.policy_last,
         "random": play_one.policy_random,
@@ -90,13 +90,15 @@ def train():
 
     optimizer = torch.optim.SGD(net.parameters(), lr=0.01)
 
-    for _ in range(10):
+    for _ in range(100):
         tasks = []
-        for _ in range(100):
-            selected = random.choices(list(available), k=2)
-            tasks.append([{select: available[select] for select in selected}])
+        for _ in range(1000):
+            selected = random.choices(list(POLICIES), k=N_PLAYER)
+            tasks.append([(select, POLICIES[select]) for select in selected])
 
         results = list(parallel_map(train_play_wrapper, tasks))
+        compare(results)
+
         xs, ys = zip(*[(r["boards"], r["winners"]) for r in results if r["winner_id"] >= 0])
 
         xs = np.vstack(xs, dtype=np.float32)
@@ -113,10 +115,6 @@ def train():
         optimizer.step()
 
         print(loss.item())
-        results = [
-            {k: v for k, v in r.items() if k in ["winner_id", "winners"]} for r in results if r["winner_id"] >= 0
-        ]
-        compare(results)
     return net
 
 
