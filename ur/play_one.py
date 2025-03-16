@@ -14,13 +14,13 @@ COMMON = sorted(range(5, 13))
 
 def create_board():
     # pieces start on [0] and end on [-1]
-    board = np.zeros((N_PLAYER, N_BOARD + 2))
+    board = np.zeros((N_PLAYER, N_BOARD + 2), dtype="uint8")
     board[:, 0] = N_PIECE
     return board
 
 
 def throw():
-    return np.random.randint(0, 2, size=4).sum().item()
+    return np.random.randint(0, 2, size=4, dtype="uint8").sum().item()
 
 
 def get_legal_moves(board, player, dice):
@@ -180,7 +180,7 @@ def policy_random(*, moves, **_):
     return random.choice(moves)
 
 
-def policy_aggressive(*, board, player, moves):
+def policy_aggressive(*, board, player, moves, **_):
     enemies = [p for p in range(N_PLAYER) if p != player]
     for move in moves[::-1]:
         if move[-1] in COMMON and board[enemies, move[-1]].sum() > 0:
@@ -190,7 +190,7 @@ def policy_aggressive(*, board, player, moves):
     return move
 
 
-def play(policies, screen=None):
+def play(policies, return_boards=False, screen=None):
     visual = VisualBoard(screen)
 
     player = 0  # Starting player
@@ -198,6 +198,7 @@ def play(policies, screen=None):
     winner = []
     iteration = 0
 
+    boards = [] if return_boards else None
     while True:
         visual.show_board()
 
@@ -210,8 +211,13 @@ def play(policies, screen=None):
             move = policies[player](board=board, player=player, moves=moves, visual=visual)
             if move == -1:
                 visual.show_info("Players quit.")
-                return -1
+                if return_boards:
+                    return -1, np.stack(boards)
+                else:
+                    return -1
             board = execute_move(board, player, *move)
+            if return_boards:
+                boards.append(np.concat([[player], board.flatten()]))
             if move[-1] in ROSETTE:
                 # Play again on rosettes
                 continue
@@ -220,12 +226,18 @@ def play(policies, screen=None):
         winner = determine_winner(board)
         if winner:
             visual.show_info(f"Player {player} won.")
-            return winner[0]
+            if return_boards:
+                return winner[0], np.stack(boards)
+            else:
+                return winner[0]
 
         iteration += 1
         if iteration > 1000:
             visual.show_info("Game is too long.")
-            return -1
+            if return_boards:
+                return -1, None
+            else:
+                return -1
 
 
 def play_human(screen):
