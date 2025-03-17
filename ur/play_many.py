@@ -62,9 +62,11 @@ def compare():
     results = list(parallel_map(compare_play_wrapper, tasks))
 
     elos = compute_elo(results)
-    print(pd.Series(elos, name="ELO").sort_values().astype(int))
+    pd.set_option('display.float_format', '{:.0f}'.format)
+    print(pd.Series(elos, name="ELO").sort_values())
 
     results = pd.DataFrame(results, columns=list(range(N_PLAYER)) + ["winner_id", "winner_name"])
+    pd.set_option('display.float_format', '{:.4f}'.format)
 
     results_draw = (
         results[results["winner_id"] == -1]
