@@ -20,12 +20,35 @@ def parallel_map(func, args, max_workers=None):
 
 
 def compare_play_wrapper(selected):
-    winner = play([getattr(play_one, s) for s in selected])
+    states = play([getattr(play_one, s) for s in selected])
+    winner = states["winner"]
     return {
         **{k: v for k, v in enumerate(selected)},
         "winner_id": winner,
         "winner_name": selected[winner],
     }
+
+
+def compute_elo(results):
+    INIT = 1000
+    SCALING = 400
+    LR = 30
+
+    available = sorted(set(r[0] for r in results) | set(r[1] for r in results))
+    elos = {k: INIT for k in available}
+
+    for result in results:
+        if result["winner_id"] >= 0:
+            id_w = result["winner_id"]
+            id_l = 1 - id_w
+            name_w = result[id_w]
+            name_l = result[id_l]
+
+            if name_w != name_l:
+                step = 1 - 1 / (1 + 10 ** (elos[name_l] - elos[name_w]) / SCALING)
+                elos[name_w] += LR * step
+                elos[name_l] -= LR * step
+    return elos
 
 
 def compare():
@@ -37,6 +60,10 @@ def compare():
         tasks.append([selected])
 
     results = list(parallel_map(compare_play_wrapper, tasks))
+
+    elos = compute_elo(results)
+    print(pd.Series(elos, name="ELO").sort_values().astype(int))
+
     results = pd.DataFrame(results, columns=list(range(N_PLAYER)) + ["winner_id", "winner_name"])
 
     results_draw = (
