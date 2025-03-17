@@ -189,11 +189,14 @@ def policy_aggressive(*, board, player, moves, **_):
     return move
 
 
-def flatten(board, player):
-    return np.concat([np.array([player], dtype=np.uint8), board.flatten()], dtype=np.uint8)
+def standardize_state(board, player):
+    # return np.concat([np.array([player], dtype=np.uint8), board.flatten()], dtype=np.uint8)
+    rows = list(range(N_PLAYER))
+    rows = rows[-player:] + rows[:player]  # rotate
+    return board[rows, :]
 
 
-def play(policies, return_boards=False, screen=None):
+def play(policies, screen=None):
     visual = VisualBoard(screen)
 
     player = 0  # Starting player
@@ -201,7 +204,12 @@ def play(policies, return_boards=False, screen=None):
     winner = []
     iteration = 0
 
-    boards = [] if return_boards else None
+    states = {
+        "winner": -1,
+        "boards": [standardize_state(board, player)],
+        "players": [player],
+    }
+
     while True:
         visual.show_board()
 
@@ -214,13 +222,10 @@ def play(policies, return_boards=False, screen=None):
             move = policies[player](board=board, player=player, moves=moves, visual=visual)
             if move == -1:
                 visual.show_info("Players quit.")
-                if return_boards:
-                    return -1, np.stack(boards, dtype=np.uint8)
-                else:
-                    return -1
+                break
             execute_move(board, player, *move)
-            if return_boards:
-                boards.append(flatten(board, player))
+            states["boards"].append(standardize_state(board, player))
+            states["players"].append(player)
             if move[-1] in ROSETTE:
                 # Play again on rosettes
                 continue
@@ -229,18 +234,17 @@ def play(policies, return_boards=False, screen=None):
         winner = determine_winner(board)
         if winner:
             visual.show_info(f"Player {player} won.")
-            if return_boards:
-                return winner[0], np.stack(boards, dtype=np.uint8)
-            else:
-                return winner[0]
+            states["winner"] = winner[0]
+            break
 
         iteration += 1
         if iteration > 1000:
             visual.show_info("Game is too long.")
-            if return_boards:
-                return -1, None
-            else:
-                return -1
+            break
+
+    states["boards"] = np.stack(states["boards"], dtype=np.uint8)
+    states["players"] = np.array(states["players"], dtype=np.uint8)
+    return states
 
 
 def play_human(screen):
