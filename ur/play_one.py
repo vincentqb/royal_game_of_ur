@@ -190,6 +190,7 @@ def policy_aggressive(*, board, player, moves, **_):
 
 
 def standardize_state(board, player):
+    # return board
     # return np.concat([np.array([player], dtype=np.uint8), board.flatten()], dtype=np.uint8)
     rows = list(range(N_PLAYER))
     rows = rows[-player:] + rows[:player]  # rotate
@@ -254,4 +255,5 @@ def play_human(screen):
 
 
 if __name__ == "__main__":
+    # play([policy_random, policy_random])
     curses.wrapper(play_human)
