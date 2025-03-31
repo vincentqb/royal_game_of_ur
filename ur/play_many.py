@@ -58,6 +58,7 @@ def compare_pairwise(results):
     results = [r for r in results if r["winner_id"] >= 0]
     results = pd.DataFrame(results, columns=col_players + ["winner_id", "winner_name"])
     results["pair_id"] = results[col_players].apply(lambda x: " ".join(sorted(x)), axis=1)
+    results = results[results[col_players].nunique(axis=1) > 1]
     results = results.groupby("pair_id", as_index=False)["winner_name"].value_counts(normalize=True)
     print(results)
     return results
