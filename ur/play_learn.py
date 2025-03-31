@@ -1,10 +1,9 @@
 import random
 
 import numpy as np
-import pandas as pd
 import play_one
 import torch
-from play_many import parallel_map
+from play_many import compare_pairwise, parallel_map
 from play_one import N_BOARD, N_PLAYER, execute_move, play, standardize_state
 
 
@@ -93,23 +92,6 @@ class ValueNet(torch.nn.Module):
         return moves[move]
 
 
-def compare(results):
-    results = pd.DataFrame(results, columns=list(range(N_PLAYER)) + ["winner_id", "winner_name"])
-
-    results_winner = [
-        results[results["winner_id"] == p]
-        .value_counts()
-        .reset_index()
-        .pivot(index=0, columns=1, values="count")
-        .fillna(0)
-        for p in range(N_PLAYER)
-    ]
-
-    p = results_winner[0] + results_winner[1].transpose()
-    print(p / (p + p.transpose()))
-    return results
-
-
 def get_one_hot(targets, n_classes):
     res = np.eye(n_classes)[np.array(targets).reshape(-1)]
     return res.reshape(list(targets.shape) + [n_classes])
@@ -135,7 +117,7 @@ def train():
             tasks.append([(select, POLICIES[select]) for select in selected])
 
         results = list(parallel_map(train_play_wrapper, tasks, max_workers=-1))
-        compare(results)
+        compare_pairwise(results)
 
         boards, winners, players = zip(
             *[

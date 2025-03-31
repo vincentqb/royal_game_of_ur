@@ -45,13 +45,25 @@ def compute_elo(results):
             name_l = result[id_l]
 
             if name_w != name_l:
-                step = 1 - 1 / (1 + 10 ** (elos[name_l] - elos[name_w]) / SCALING)
-                elos[name_w] += LR * step
-                elos[name_l] -= LR * step
+                # Probability of Winner Winning, and Loser Winning.
+                P_W = 1 / (1 + 10 ** ((elos[name_l] - elos[name_w]) / SCALING))
+                P_L = 1 / (1 + 10 ** ((elos[name_w] - elos[name_l]) / SCALING))
+                elos[name_w] += LR * (1 - P_W)
+                elos[name_l] += LR * (0 - P_L)
     return elos
 
 
-def compare():
+def compare_pairwise(results):
+    col_players = list(range(N_PLAYER))
+    results = [r for r in results if r["winner_id"] >= 0]
+    results = pd.DataFrame(results, columns=col_players + ["winner_id", "winner_name"])
+    results["pair_id"] = results[col_players].apply(lambda x: " ".join(sorted(x)), axis=1)
+    results = results.groupby("pair_id", as_index=False)["winner_name"].value_counts(normalize=True)
+    print(results)
+    return results
+
+
+def play_many():
     available = ["policy_first", "policy_last", "policy_random", "policy_aggressive"]
 
     tasks = []
@@ -62,36 +74,13 @@ def compare():
     results = list(parallel_map(compare_play_wrapper, tasks))
 
     elos = compute_elo(results)
-    pd.set_option('display.float_format', '{:.0f}'.format)
+    pd.set_option("display.float_format", "{:.0f}".format)
     print(pd.Series(elos, name="ELO").sort_values())
 
-    results = pd.DataFrame(results, columns=list(range(N_PLAYER)) + ["winner_id", "winner_name"])
-    pd.set_option('display.float_format', '{:.4f}'.format)
-
-    results_draw = (
-        results[results["winner_id"] == -1]
-        .value_counts()
-        .reset_index()
-        .pivot(index=0, columns=1, values="count")
-        .fillna(0)
-    )
-    print("Draws")
-    print(results_draw)
-
-    results_winner = [
-        results[results["winner_id"] == p]
-        .value_counts()
-        .reset_index()
-        .pivot(index=0, columns=1, values="count")
-        .fillna(0)
-        for p in range(N_PLAYER)
-    ]
-
-    p = results_winner[0] + results_winner[1].transpose()
-    print("Winner vs Loser")
-    print(p / (p + p.transpose()))
+    pd.set_option("display.float_format", "{:.4f}".format)
+    compare_pairwise(results)
     return results
 
 
 if __name__ == "__main__":
-    results = compare()
+    results = play_many()
