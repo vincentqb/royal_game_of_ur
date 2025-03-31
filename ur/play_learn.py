@@ -3,7 +3,7 @@ import random
 import numpy as np
 import play_one
 import torch
-from play_many import compare_pairwise, parallel_map
+from play_many import compare_elo, compare_pairwise, parallel_map
 from play_one import N_BOARD, N_PLAYER, execute_move, play, standardize_state
 
 
@@ -112,12 +112,13 @@ def train():
     net.train()
     for _ in range(100):
         tasks = []
-        for _ in range(10):
+        for _ in range(50):
             selected = random.choices(list(POLICIES), k=N_PLAYER)
             tasks.append([(select, POLICIES[select]) for select in selected])
 
         results = list(parallel_map(train_play_wrapper, tasks, max_workers=-1))
-        compare_pairwise(results)
+        # print(compare_pairwise(results))
+        print(compare_elo(results))
 
         boards, winners, players = zip(
             *[

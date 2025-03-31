@@ -29,7 +29,7 @@ def compare_play_wrapper(selected):
     }
 
 
-def compute_elo(results):
+def compare_elo(results):
     INIT = 1000
     SCALING = 400
     LR = 30
@@ -45,11 +45,14 @@ def compute_elo(results):
             name_l = result[id_l]
 
             if name_w != name_l:
+                delta = (elos[name_l] - elos[name_w]) / SCALING
                 # Probability of Winner Winning, and Loser Winning.
-                P_W = 1 / (1 + 10 ** ((elos[name_l] - elos[name_w]) / SCALING))
-                P_L = 1 / (1 + 10 ** ((elos[name_w] - elos[name_l]) / SCALING))
+                P_W = 1 / (1 + 10 ** (+delta))
+                P_L = 1 / (1 + 10 ** (-delta))
+                # Step due to Winning and Losing
                 elos[name_w] += LR * (1 - P_W)
                 elos[name_l] += LR * (0 - P_L)
+    elos = pd.Series(elos, name="ELO").sort_values()
     return elos
 
 
@@ -60,7 +63,6 @@ def compare_pairwise(results):
     results["pair_id"] = results[col_players].apply(lambda x: " ".join(sorted(x)), axis=1)
     results = results[results[col_players].nunique(axis=1) > 1]
     results = results.groupby("pair_id", as_index=False)["winner_name"].value_counts(normalize=True)
-    print(results)
     return results
 
 
@@ -74,12 +76,12 @@ def play_many():
 
     results = list(parallel_map(compare_play_wrapper, tasks))
 
-    elos = compute_elo(results)
     pd.set_option("display.float_format", "{:.0f}".format)
-    print(pd.Series(elos, name="ELO").sort_values())
+    print(compare_elo(results))
 
     pd.set_option("display.float_format", "{:.4f}".format)
-    compare_pairwise(results)
+    print(compare_pairwise(results))
+
     return results
 
 
