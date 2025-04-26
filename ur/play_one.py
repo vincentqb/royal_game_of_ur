@@ -193,15 +193,15 @@ def standardize_state(board, player):
     # return board
     # return np.concat([np.array([player], dtype=np.uint8), board.flatten()], dtype=np.uint8)
     rows = list(range(N_PLAYER))
-    rows = rows[-player:] + rows[:player]  # rotate
+    rows = rows[player:] + rows[:player]  # rotate
     return board[rows, :]
 
 
-def play(policies, screen=None):
+def play(policies, board=None, screen=None):
     visual = VisualBoard(screen)
 
     player = 0  # Starting player
-    board = create_board()
+    board = create_board() if board is None else board
     winner = []
     iteration = 0
 
