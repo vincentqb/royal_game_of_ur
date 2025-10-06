@@ -25,21 +25,23 @@ from tqdm import tqdm
 class UrNet(nn.Module):
     """Neural network for policy and value prediction."""
 
-    def __init__(self, input_size=(N_PLAYER * (N_BOARD + 2)), hidden_size=128):
+    def __init__(self, input_size=(N_PLAYER * (N_BOARD + 2)), hidden_size=128, device=None):
         super().__init__()
 
         self.shared = nn.Sequential(
-            nn.Linear(input_size, hidden_size),
+            nn.Linear(input_size, hidden_size, device=device),
             nn.ReLU(),
-            nn.Linear(hidden_size, hidden_size),
+            nn.Linear(hidden_size, hidden_size, device=device),
             nn.ReLU(),
-            nn.Linear(hidden_size, hidden_size // 2),
+            nn.Linear(hidden_size, hidden_size // 2, device=device),
             nn.ReLU(),
         )
 
-        self.policy = nn.Linear(hidden_size // 2, N_BOARD + 2)
+        self.policy = nn.Linear(hidden_size // 2, N_BOARD + 2, device=device)
 
-        self.value = nn.Sequential(nn.Linear(hidden_size // 2, 32), nn.ReLU(), nn.Linear(32, 1), nn.Tanh())
+        self.value = nn.Sequential(
+            nn.Linear(hidden_size // 2, 32, device=device), nn.ReLU(), nn.Linear(32, 1, device=device), nn.Tanh()
+        )
 
     def forward(self, x):
         features = self.shared(x)
@@ -128,7 +130,7 @@ def create_policy_neural(model_path, temperature=0.1):
         Policy function compatible with play_one interface
     """
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    net = UrNet().to(device)
+    net = UrNet(device=device)
     checkpoint = torch.load(model_path, map_location=device)
 
     if "model_state_dict" in checkpoint:
@@ -370,7 +372,7 @@ def train(num_iterations=500, games_per_iter=50, batch_size=64, eval_interval=10
     print("Initializing AlphaUr training...")
     print(f"Device: {device}")
 
-    net = UrNet().to(device)
+    net = UrNet(device=device)
     optimizer = optim.Adam(net.parameters(), lr=lr)
     buffer = ReplayBuffer(max_size=50000)
 
