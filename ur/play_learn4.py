@@ -19,7 +19,7 @@ from play_one import (
     standardize_state,
     throw,
 )
-from tqdm import tqdm
+from tqdm import tqdm, trange
 
 
 class UrNet(nn.Module):
@@ -352,7 +352,7 @@ def evaluate_models(model_paths, baseline_policies, num_games=100):
         selected = random.choices(available, k=2)
         tasks.append([selected])
 
-    results = list(parallel_map(compare_play_wrapper, tasks))
+    results = list(parallel_map(compare_play_wrapper, tasks, use_threads=True))
 
     pd.set_option("display.float_format", "{:.0f}".format)
     elos = compare_elo(results)
@@ -398,13 +398,8 @@ def train(
 
     best_win_rate = 0.0
 
-    for iteration in range(num_iterations):
-        print(f"\n{'=' * 60}")
-        print(f"Iteration {iteration + 1}/{num_iterations}")
-        print(f"{'=' * 60}")
-
+    for iteration in trange(num_iterations, ncols=0, desc="Epoch"):
         # Self-play phase (parallel with threading)
-        print(f"Self-play: generating {games_per_iter} games...")
         temperature = max(0.5, 1.0 - iteration / num_iterations)
 
         net.eval()  # Set to eval mode for inference
@@ -416,7 +411,6 @@ def train(
 
         # Training phase
         if len(buffer) >= batch_size:
-            print("Training...")
             net.train()  # Set to train mode
 
             num_batches = min(100, len(buffer) // batch_size)
@@ -435,7 +429,7 @@ def train(
             avg_p_loss = total_policy_loss / num_batches
             avg_v_loss = total_value_loss / num_batches
 
-            print(f"  Loss: {avg_loss:.4f} (Policy: {avg_p_loss:.4f}, Value: {avg_v_loss:.4f})")
+            print(f"Loss: {avg_loss:.4f} (Policy: {avg_p_loss:.4f}, Value: {avg_v_loss:.4f})")
 
         # Evaluation phase
         if (iteration + 1) % eval_interval == 0:
@@ -452,7 +446,7 @@ def train(
             if elo_diff > best_win_rate:
                 best_win_rate = elo_diff
                 torch.save(net.state_dict(), "ur_best_model.pt")
-                print(f"  New best model saved! (ELO diff: {best_win_rate:.0f})")
+                print(f"New best model saved! (ELO diff: {best_win_rate:.0f})")
 
         # Save checkpoint
         if (iteration + 1) % save_interval == 0:
@@ -465,12 +459,10 @@ def train(
                 },
                 f"ur_checkpoint_{iteration + 1}.pt",
             )
-            print("  Checkpoint saved!")
+            print("Checkpoint saved")
 
-    print("\n" + "=" * 60)
-    print("Training complete!")
+    print("Training completed")
     print(f"Best ELO difference: {best_win_rate:.0f}")
-    print("=" * 60)
 
     return net
 
