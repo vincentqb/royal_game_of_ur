@@ -1,6 +1,6 @@
 import random
 from collections import deque
-from concurrent.futures import ProcessPoolExecutor, as_completed
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 
 import numpy as np
 import pandas as pd
@@ -95,7 +95,7 @@ def select_move(net, board, player, moves, device, temperature=1.0, training=Tru
 
     board_tensor = board_to_tensor(board, device).unsqueeze(0)
 
-    with torch.no_grad():
+    with torch.inference_mode():
         policy_logits, value = net(board_tensor)
         policy_logits = policy_logits.squeeze(0)
 
@@ -155,7 +155,7 @@ class ReplayBuffer:
 
     def add(self, board, move_probs, reward):
         """Add experience to buffer."""
-        self.buffer.append({"board": board, "move_probs": move_probs.cpu().numpy(), "reward": reward})
+        self.buffer.append({"board": board, "move_probs": move_probs, "reward": reward})
 
     def sample(self, batch_size):
         batch_size = min(batch_size, len(self.buffer))
@@ -166,7 +166,12 @@ class ReplayBuffer:
 
 
 def self_play_game(net, device, temperature=1.0):
-    """Play one game against itself.
+    """Play one game against itself using inference mode.
+
+    Args:
+        net: Neural network (shared, read-only)
+        device: torch device
+        temperature: Exploration temperature
 
     Returns:
         experiences: List of (board, move_probs, reward) tuples
@@ -186,7 +191,8 @@ def self_play_game(net, device, temperature=1.0):
             move, value, probs = select_move(net, std_board, player, moves, device, temperature, training=True)
 
             if move:
-                experiences.append((std_board.copy(), player, probs))
+                # Convert probs to numpy immediately to avoid keeping GPU tensors
+                experiences.append((std_board.copy(), player, probs.cpu().numpy()))
                 execute_move(board, player, *move)
 
                 if move[-1] not in [4, 8, 14]:
@@ -245,10 +251,18 @@ def train_batch(net, optimizer, batch, device):
     return loss.item(), policy_loss.item(), value_loss.item()
 
 
-def parallel_map(func, args, max_workers=None):
-    """Applies func to items in args (list of tuples), preserving order."""
+def parallel_map(func, args, max_workers=16, use_threads=False):
+    """Applies func to items in args (list of tuples), preserving order.
+
+    Args:
+        func: Function to apply
+        args: List of tuples of arguments
+        max_workers: Number of workers (None for auto)
+        use_threads: If True, use ThreadPoolExecutor; else ProcessPoolExecutor
+    """
     if max_workers is None or max_workers >= 0:
-        with ProcessPoolExecutor(max_workers=max_workers) as executor:
+        ExecutorClass = ThreadPoolExecutor if use_threads else ProcessPoolExecutor
+        with ExecutorClass(max_workers=max_workers) as executor:
             futures = [executor.submit(func, *arg) for arg in args]
             for future in tqdm(as_completed(futures), total=len(futures), ncols=0):
                 yield future.result()
@@ -316,14 +330,13 @@ def compare_pairwise(results):
     return results
 
 
-def evaluate_models(model_paths, baseline_policies, num_games=100, max_workers=None):
+def evaluate_models(model_paths, baseline_policies, num_games=100):
     """Evaluate multiple models against baseline policies using ELO.
 
     Args:
         model_paths: List of paths to model checkpoints or dict {name: path}
         baseline_policies: List of policy names from play_one (e.g., ['policy_random'])
         num_games: Number of games to play
-        max_workers: Number of parallel workers (None for auto)
 
     Returns:
         elos: Series of ELO ratings
@@ -339,7 +352,7 @@ def evaluate_models(model_paths, baseline_policies, num_games=100, max_workers=N
         selected = random.choices(available, k=2)
         tasks.append([selected])
 
-    results = list(parallel_map(compare_play_wrapper, tasks, max_workers=max_workers))
+    results = list(parallel_map(compare_play_wrapper, tasks))
 
     pd.set_option("display.float_format", "{:.0f}".format)
     elos = compare_elo(results)
@@ -354,7 +367,14 @@ def evaluate_models(model_paths, baseline_policies, num_games=100, max_workers=N
     return elos, pairwise
 
 
-def train(num_iterations=500, games_per_iter=50, batch_size=64, eval_interval=10, save_interval=50, lr=0.001):
+def train(
+    num_iterations=500,
+    games_per_iter=50,
+    batch_size=64,
+    eval_interval=10,
+    save_interval=50,
+    lr=0.001,
+):
     """Main training loop.
 
     Args:
@@ -383,22 +403,22 @@ def train(num_iterations=500, games_per_iter=50, batch_size=64, eval_interval=10
         print(f"Iteration {iteration + 1}/{num_iterations}")
         print(f"{'=' * 60}")
 
-        # Self-play phase
+        # Self-play phase (parallel with threading)
         print(f"Self-play: generating {games_per_iter} games...")
         temperature = max(0.5, 1.0 - iteration / num_iterations)
 
-        for game_idx in range(games_per_iter):
-            experiences = self_play_game(net, device, temperature=temperature)
+        net.eval()  # Set to eval mode for inference
 
+        tasks = [(net, device, temperature) for _ in range(games_per_iter)]
+        for experiences in parallel_map(self_play_game, tasks, use_threads=True):
             for exp_board, exp_probs, reward in experiences:
                 buffer.add(exp_board, exp_probs, reward)
-
-            if (game_idx + 1) % 10 == 0:
-                print(f"  Games: {game_idx + 1}/{games_per_iter}, Buffer size: {len(buffer)}")
 
         # Training phase
         if len(buffer) >= batch_size:
             print("Training...")
+            net.train()  # Set to train mode
+
             num_batches = min(100, len(buffer) // batch_size)
             total_loss = 0.0
             total_policy_loss = 0.0
@@ -419,16 +439,12 @@ def train(num_iterations=500, games_per_iter=50, batch_size=64, eval_interval=10
 
         # Evaluation phase
         if (iteration + 1) % eval_interval == 0:
-            # Save checkpoint for evaluation
             eval_path = "ur_eval_temp.pt"
             torch.save(net.state_dict(), eval_path)
 
             print("\nEvaluating against baseline policies...")
-            elos, pairwise = evaluate_models(
-                [eval_path], ["policy_random", "policy_aggressive"], num_games=50, max_workers=4
-            )
+            elos, pairwise = evaluate_models([eval_path], ["policy_random", "policy_aggressive"], num_games=50)
 
-            # Calculate win rate (ELO difference)
             neural_elo = elos.get(eval_path, 1000)
             baseline_avg_elo = elos.drop(eval_path).mean()
             elo_diff = neural_elo - baseline_avg_elo
@@ -461,7 +477,13 @@ def train(num_iterations=500, games_per_iter=50, batch_size=64, eval_interval=10
 
 if __name__ == "__main__":
     # Train the agent
-    trained_net = train(num_iterations=500, games_per_iter=50, batch_size=64, eval_interval=10, save_interval=50)
+    trained_net = train(
+        num_iterations=500,
+        games_per_iter=50,
+        batch_size=64,
+        eval_interval=10,
+        save_interval=50,
+    )
 
     # Save final model
     torch.save(trained_net.state_dict(), "ur_final_model.pt")
@@ -475,5 +497,4 @@ if __name__ == "__main__":
         ["ur_final_model.pt"],
         ["policy_random", "policy_aggressive", "policy_first", "policy_last"],
         num_games=200,
-        max_workers=4,
     )
