@@ -3,7 +3,7 @@ import random
 import numpy as np
 import play_one
 import torch
-from play_many import compare_elo, compare_pairwise, parallel_map
+from play_many import compare_elo, parallel_map
 from play_one import N_BOARD, N_PLAYER, execute_move, play, standardize_state
 
 
@@ -62,7 +62,9 @@ class ValueNet(torch.nn.Module):
         boards = []
         for move in moves:
             board_ = board.copy()
+            play([self.pick_move, self.pick_move], board=board_)
             execute_move(board_, player, *move)
+
             board_ = standardize_state(board_, player)
             # TODO play other players assuming best move
             # TODO replay on rosetta
@@ -101,9 +103,9 @@ def train():
     net = ValueNet()
     POLICIES = {
         "first": play_one.policy_first,
-        "last": play_one.policy_last,
-        "random": play_one.policy_random,
-        "aggressive": play_one.policy_aggressive,
+        # "last": play_one.policy_last,
+        # "random": play_one.policy_random,
+        # "aggressive": play_one.policy_aggressive,
         "model": net.pick_move,
     }
 
