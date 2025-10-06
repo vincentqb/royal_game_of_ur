@@ -471,7 +471,7 @@ if __name__ == "__main__":
     # Train the agent
     trained_net = train(
         num_iterations=500,
-        games_per_iter=50,
+        games_per_iter=64,
         batch_size=64,
         eval_interval=10,
         save_interval=50,
