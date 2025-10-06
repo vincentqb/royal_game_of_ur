@@ -86,7 +86,7 @@ def select_move(net, board, player, moves, device, temperature=1.0, training=Tru
     Returns:
         move: Selected (start, end) move
         value: Estimated value of position
-        probs: Action probabilities as torch tensor (for training)
+        probs: Action probabilities
     """
     if not moves:
         return None, 0.0, None
@@ -188,6 +188,7 @@ def self_play_game(net, device, temperature=1.0):
                 execute_move(board, player, *move)
 
                 if move[-1] not in [4, 8, 14]:
+                    # Not a rosette
                     player = (player + 1) % N_PLAYER
             else:
                 player = (player + 1) % N_PLAYER
@@ -417,7 +418,7 @@ def train(num_iterations=500, games_per_iter=50, batch_size=64, eval_interval=10
         # Evaluation phase
         if (iteration + 1) % eval_interval == 0:
             # Save checkpoint for evaluation
-            eval_path = f"ur_eval_temp.pt"
+            eval_path = "ur_eval_temp.pt"
             torch.save(net.state_dict(), eval_path)
 
             print("\nEvaluating against baseline policies...")
@@ -446,7 +447,7 @@ def train(num_iterations=500, games_per_iter=50, batch_size=64, eval_interval=10
                 },
                 f"ur_checkpoint_{iteration + 1}.pt",
             )
-            print(f"  Checkpoint saved!")
+            print("  Checkpoint saved!")
 
     print("\n" + "=" * 60)
     print("Training complete!")
