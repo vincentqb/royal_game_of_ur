@@ -7,6 +7,7 @@ import pandas as pd
 import torch
 import torch.nn as nn
 import torch.optim as optim
+from loguru import logger
 from play_one import (
     N_BOARD,
     N_PIECE,
@@ -20,6 +21,11 @@ from play_one import (
     throw,
 )
 from tqdm import tqdm, trange
+
+
+def configure_logger():
+    logger.remove()
+    logger.add(tqdm.write, end="", level="INFO")
 
 
 class UrNet(nn.Module):
@@ -164,7 +170,7 @@ class ReplayBuffer:
         return len(self.buffer)
 
 
-def self_play_game(net, *, temperature, device=None):
+def self_play_game(net, temperature, device):
     """Play one game against itself using inference mode.
 
     Args:
@@ -241,7 +247,7 @@ def train_batch(net, optimizer, batch, device):
 
     # Total loss
     alpha = 0.9
-    loss = alpha * policy_loss + (1-alpha) * value_loss
+    loss = alpha * policy_loss + (1 - alpha) * value_loss
 
     optimizer.zero_grad()
     loss.backward()
@@ -356,13 +362,11 @@ def evaluate_models(model_paths, baseline_policies, num_games=100):
 
     pd.set_option("display.float_format", "{:.0f}".format)
     elos = compare_elo(results)
-    print("\nELO Ratings:")
-    print(elos)
+    logger.info("\nELO Ratings:\n{elos}")
 
     pd.set_option("display.float_format", "{:.4f}".format)
     pairwise = compare_pairwise(results)
-    print("\nPairwise Win Rates:")
-    print(pairwise)
+    logger.info("\nPairwise Win Rates:\n{pairwise}")
 
     return elos, pairwise
 
@@ -385,8 +389,8 @@ def train(
         net: Trained network
     """
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print("Initializing AlphaUr training...")
-    print(f"Device: {device}")
+    logger.trace("Initializing AlphaUr training")
+    logger.trace(f"Device: {device}")
 
     net = UrNet(device=device)
     optimizer = optim.Adam(net.parameters(), lr=0.003)
@@ -425,14 +429,14 @@ def train(
             avg_p_loss = total_policy_loss / num_batches
             avg_v_loss = total_value_loss / num_batches
 
-            print(f"Loss: {avg_loss:.4f} (Policy: {avg_p_loss:.4f}, Value: {avg_v_loss:.4f})")
+            logger.info(f"Loss: {avg_loss:.4f} (Policy: {avg_p_loss:.4f}, Value: {avg_v_loss:.4f})")
 
         # Evaluation phase
         if (iteration + 1) % eval_interval == 0:
             eval_path = "ur_eval_temp.pt"
             torch.save(net.state_dict(), eval_path)
 
-            print("\nEvaluating against baseline policies...")
+            logger.info("\nEvaluating against baseline policies...")
             elos, pairwise = evaluate_models([eval_path], ["policy_random", "policy_aggressive"], num_games=50)
 
             neural_elo = elos.get(eval_path, 1000)
@@ -442,7 +446,7 @@ def train(
             if elo_diff > best_win_rate:
                 best_win_rate = elo_diff
                 torch.save(net.state_dict(), "ur_best_model.pt")
-                print(f"New best model saved! (ELO diff: {best_win_rate:.0f})")
+                logger.success(f"New best model saved! (ELO diff: {best_win_rate:.0f})")
 
         # Save checkpoint
         if (iteration + 1) % save_interval == 0:
@@ -455,10 +459,10 @@ def train(
                 },
                 f"ur_checkpoint_{iteration + 1}.pt",
             )
-            print("Checkpoint saved")
+            logger.debug("Checkpoint saved")
 
-    print("Training completed")
-    print(f"Best ELO difference: {best_win_rate:.0f}")
+    logger.info("Training completed")
+    logger.success(f"Best ELO difference: {best_win_rate:.0f}")
 
     return net
 
@@ -474,12 +478,9 @@ if __name__ == "__main__":
 
     # Save final model
     torch.save(trained_net.state_dict(), "ur_final_model.pt")
-    print("\nFinal model saved as 'ur_final_model.pt'")
+    logger.info("\nFinal model saved as 'ur_final_model.pt'")
 
     # Final evaluation
-    print("\n" + "=" * 60)
-    print("Final Evaluation")
-    print("=" * 60)
     evaluate_models(
         ["ur_final_model.pt"],
         ["policy_random", "policy_aggressive", "policy_first", "policy_last"],
