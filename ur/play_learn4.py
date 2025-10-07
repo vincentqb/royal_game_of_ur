@@ -226,6 +226,8 @@ def self_play_game(net, temperature, device):
         if winner:
             training_data = []
             for exp_board, exp_player, exp_probs in experiences:
+                # TODO add a small contribution corresponding to point difference
+                # e.g. + (saved pieces - other player's saved pieces) / (number of pieces)
                 reward = 1.0 if exp_player == winner[0] else -1.0
                 training_data.append((exp_board, exp_probs, reward))
 
