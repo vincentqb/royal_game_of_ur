@@ -62,13 +62,14 @@ class UrNet(nn.Module):
 
 
 def board_to_tensor(board, *, device):
-    """Convert board state to tensor (normalized)."""
+    """Convert board state to normalized tensor."""
     board_norm = board.astype(np.float32) / N_PIECE
     return torch.from_numpy(board_norm.flatten()).to(device).to(dtype)
 
 
 def get_move_mask(moves, *, device):
-    """Create mask for legal moves.
+    """
+    Create mask for legal moves.
 
     Returns:
         mask: Tensor with 0 for legal starting positions, -inf for illegal
@@ -85,7 +86,8 @@ def get_move_mask(moves, *, device):
 
 
 def select_move(net, board, player, moves, *, device, temperature=1.0, training=True):
-    """Select move using policy network with dice-based masking.
+    """
+    Select move using policy network with dice-based masking.
 
     Args:
         net: Neural network
@@ -129,7 +131,8 @@ def select_move(net, board, player, moves, *, device, temperature=1.0, training=
 
 
 def create_policy_neural(model_path):
-    """Create a policy_neural function for a specific model.
+    """
+    Create a policy_neural function for a specific model.
 
     This creates a policy function that can be used with play_one.play()
     and can be pickled for multiprocessing.
@@ -177,7 +180,8 @@ class ReplayBuffer:
 
 
 def self_play_game(net, temperature, device):
-    """Play one game against itself using inference mode.
+    """
+    Play one game against itself using inference mode.
 
     Args:
         net: Neural network (shared, read-only)
@@ -268,7 +272,8 @@ def train_batch(net, optimizer, batch, *, device):
 
 
 def parallel_map(func, args, *, max_workers=16, use_threads=True):
-    """Applies func to items in args (list of tuples), preserving order.
+    """
+    Applies func to items in args (list of tuples), preserving order.
 
     Args:
         func: Function to apply
@@ -347,7 +352,8 @@ def compare_pairwise(results):
 
 
 def evaluate_models(model_paths, baseline_policies, num_games=50):
-    """Evaluate multiple models against baseline policies using ELO.
+    """
+    Evaluate multiple models against baseline policies using ELO.
 
     Args:
         model_paths: List of paths to model checkpoints or dict {name: path}
@@ -370,13 +376,13 @@ def evaluate_models(model_paths, baseline_policies, num_games=50):
 
     results = list(parallel_map(compare_play_wrapper, tasks))
 
-    pd.set_option("display.float_format", "{:.0f}".format)
-    elos = compare_elo(results)
-    logger.info("\nELO Ratings:\n{elos}")
+    with pd.option_context("display.float_format", "{:.0f}".format):
+        elos = compare_elo(results)
+        logger.info(f"\nELO Ratings:\n{elos}")
 
-    pd.set_option("display.float_format", "{:.4f}".format)
-    pairwise = compare_pairwise(results)
-    logger.info("\nPairwise Win Rates:\n{pairwise}")
+    with pd.option_context("display.float_format", "{:.4f}".format):
+        pairwise = compare_pairwise(results)
+        logger.info(f"\nPairwise Win Rates:\n{pairwise}")
 
     return elos, pairwise
 
@@ -388,11 +394,12 @@ def train(
     eval_interval=10,
     save_interval=50,
 ):
-    """Main training loop.
+    """
+    Main training loop.
 
     Args:
-        num_iterations: Number of training iterations
         batch_size: Training batch size
+        num_iterations: Number of training iterations
         eval_interval: Evaluate every N iterations
         save_interval: Save model every N iterations
 
@@ -406,7 +413,7 @@ def train(
     optimizer = optim.Adam(net.parameters(), lr=0.003)
     buffer = ReplayBuffer()
 
-    best_win_rate = 0.0
+    best_elo = 0.0
 
     for iteration in trange(num_iterations, ncols=0, desc="Epoch"):
         # Self-play phase (parallel with threading)
@@ -439,40 +446,38 @@ def train(
             avg_p_loss = total_policy_loss / num_batches
             avg_v_loss = total_value_loss / num_batches
 
-            logger.info(f"Loss: {avg_loss:.4f} (Policy: {avg_p_loss:.4f}, Value: {avg_v_loss:.4f})")
+            logger.info(f"Loss: {avg_loss:.4f} - Policy: {avg_p_loss:.4f} - Value: {avg_v_loss:.4f}")
 
         # Evaluation phase
         if (iteration + 1) % eval_interval == 0:
             eval_path = "ur_eval_temp.pt"
             torch.save(net.state_dict(), eval_path)
 
-            logger.info("\nEvaluating against baseline policies...")
             elos, pairwise = evaluate_models([eval_path], ["policy_random", "policy_aggressive"])
+            neural_elo = elos[eval_path]
 
-            neural_elo = elos.get(eval_path, 1000)
-            baseline_avg_elo = elos.drop(eval_path).mean()
-            elo_diff = neural_elo - baseline_avg_elo
-
-            if elo_diff > best_win_rate:
-                best_win_rate = elo_diff
-                torch.save(net.state_dict(), "ur_best_model.pt")
-                logger.success(f"New best model saved! (ELO diff: {best_win_rate:.0f})")
+            if neural_elo > best_elo:
+                filename = "ur_best_model.pt"
+                torch.save(net.state_dict(), filename)
+                logger.debug(f"New best model saved saved to {filename}")
+                logger.success(f"New best model saved - ELO: {neural_elo:.0f}")
 
         # Save checkpoint
         if (iteration + 1) % save_interval == 0:
+            filename = f"ur_checkpoint_{iteration + 1}.pt"
             torch.save(
                 {
                     "iteration": iteration,
                     "model_state_dict": net.state_dict(),
                     "optimizer_state_dict": optimizer.state_dict(),
-                    "best_elo_diff": best_win_rate,
+                    "current_elo": neural_elo,
+                    "best_elo": best_elo,
                 },
-                f"ur_checkpoint_{iteration + 1}.pt",
+                filename,
             )
-            logger.debug("Checkpoint saved")
+            logger.debug(f"Checkpoint saved to {filename}")
 
-    logger.info("Training completed")
-    logger.success(f"Best ELO difference: {best_win_rate:.0f}")
+    logger.success(f"Best ELO: {best_elo:.0f}")
 
     return net
 
@@ -484,8 +489,9 @@ if __name__ == "__main__":
     trained_net = train()
 
     # Save final model
-    torch.save(trained_net.state_dict(), "ur_final_model.pt")
-    logger.info("\nFinal model saved as 'ur_final_model.pt'")
+    filename = "ur_final_model.pt"
+    torch.save(trained_net.state_dict(), filename)
+    logger.info(f"\nFinal model saved as '{filename}'")
 
     # Final evaluation
     evaluate_models(
