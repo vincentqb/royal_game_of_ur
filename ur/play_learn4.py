@@ -73,7 +73,7 @@ def get_move_mask(moves, device):
     return mask, move_map
 
 
-def select_move(net, board, player, moves, device, temperature=1.0, training=True):
+def select_move(net, board, player, moves, *, device, temperature=1.0, training=True):
     """Select move using policy network with dice-based masking.
 
     Args:
@@ -116,7 +116,7 @@ def select_move(net, board, player, moves, device, temperature=1.0, training=Tru
         return move, value.item(), probs
 
 
-def create_policy_neural(model_path, temperature=0.1):
+def create_policy_neural(model_path):
     """Create a policy_neural function for a specific model.
 
     This creates a policy function that can be used with play_one.play()
@@ -124,7 +124,6 @@ def create_policy_neural(model_path, temperature=0.1):
 
     Args:
         model_path: Path to saved model checkpoint
-        temperature: Temperature for move selection
 
     Returns:
         Policy function compatible with play_one interface
@@ -141,7 +140,7 @@ def create_policy_neural(model_path, temperature=0.1):
     net.eval()
 
     def policy_neural(board, player, moves, **kwargs):
-        move, _, _ = select_move(net, board, player, moves, device, temperature, training=False)
+        move, _, _ = select_move(net, board, player, moves, device, training=False)
         return move
 
     return policy_neural
@@ -165,7 +164,7 @@ class ReplayBuffer:
         return len(self.buffer)
 
 
-def self_play_game(net, device, temperature=1.0):
+def self_play_game(net, *, temperature, device=None):
     """Play one game against itself using inference mode.
 
     Args:
@@ -251,7 +250,7 @@ def train_batch(net, optimizer, batch, device):
     return loss.item(), policy_loss.item(), value_loss.item()
 
 
-def parallel_map(func, args, max_workers=16, use_threads=False):
+def parallel_map(func, args, *, max_workers=16, use_threads=True):
     """Applies func to items in args (list of tuples), preserving order.
 
     Args:
@@ -352,7 +351,7 @@ def evaluate_models(model_paths, baseline_policies, num_games=100):
         selected = random.choices(available, k=2)
         tasks.append([selected])
 
-    results = list(parallel_map(compare_play_wrapper, tasks, use_threads=True))
+    results = list(parallel_map(compare_play_wrapper, tasks))
 
     pd.set_option("display.float_format", "{:.0f}".format)
     elos = compare_elo(results)
@@ -394,7 +393,7 @@ def train(
 
     net = UrNet(device=device)
     optimizer = optim.Adam(net.parameters(), lr=lr)
-    buffer = ReplayBuffer(max_size=50000)
+    buffer = ReplayBuffer()
 
     best_win_rate = 0.0
 
@@ -404,8 +403,8 @@ def train(
 
         net.eval()  # Set to eval mode for inference
 
-        tasks = [(net, device, temperature) for _ in range(games_per_iter)]
-        for experiences in parallel_map(self_play_game, tasks, use_threads=True):
+        tasks = [(net, device, temperature) for _ in range(batch_size)]
+        for experiences in parallel_map(self_play_game, tasks):
             for exp_board, exp_probs, reward in experiences:
                 buffer.add(exp_board, exp_probs, reward)
 
