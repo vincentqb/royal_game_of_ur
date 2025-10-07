@@ -240,7 +240,8 @@ def train_batch(net, optimizer, batch, device):
     value_loss = ((values - rewards) ** 2).mean()
 
     # Total loss
-    loss = policy_loss + value_loss
+    alpha = 0.9
+    loss = alpha * policy_loss + (1-alpha) * value_loss
 
     optimizer.zero_grad()
     loss.backward()
@@ -368,21 +369,17 @@ def evaluate_models(model_paths, baseline_policies, num_games=100):
 
 def train(
     num_iterations=500,
-    games_per_iter=50,
     batch_size=64,
     eval_interval=10,
     save_interval=50,
-    lr=0.001,
 ):
     """Main training loop.
 
     Args:
         num_iterations: Number of training iterations
-        games_per_iter: Self-play games per iteration
         batch_size: Training batch size
         eval_interval: Evaluate every N iterations
         save_interval: Save model every N iterations
-        lr: Learning rate
 
     Returns:
         net: Trained network
@@ -392,14 +389,14 @@ def train(
     print(f"Device: {device}")
 
     net = UrNet(device=device)
-    optimizer = optim.Adam(net.parameters(), lr=lr)
+    optimizer = optim.Adam(net.parameters(), lr=0.003)
     buffer = ReplayBuffer()
 
     best_win_rate = 0.0
 
     for iteration in trange(num_iterations, ncols=0, desc="Epoch"):
         # Self-play phase (parallel with threading)
-        temperature = max(0.5, 1.0 - iteration / num_iterations)
+        temperature = max(0.5, 2.0 - iteration / num_iterations / 2.0)
 
         net.eval()  # Set to eval mode for inference
 
@@ -470,8 +467,7 @@ if __name__ == "__main__":
     # Train the agent
     trained_net = train(
         num_iterations=500,
-        games_per_iter=64,
-        batch_size=64,
+        batch_size=128,
         eval_interval=10,
         save_interval=50,
     )
