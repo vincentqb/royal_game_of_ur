@@ -22,10 +22,12 @@ from play_one import (
 )
 from tqdm import tqdm, trange
 
+dtype = torch.float32
+
 
 def configure_logger():
     logger.remove()
-    logger.add(tqdm.write, end="", level="INFO")
+    logger.add(lambda msg: tqdm.write(msg, end=""), colorize=True, level="INFO")
 
 
 class UrNet(nn.Module):
@@ -35,18 +37,21 @@ class UrNet(nn.Module):
         super().__init__()
 
         self.shared = nn.Sequential(
-            nn.Linear(input_size, hidden_size, device=device),
+            nn.Linear(input_size, hidden_size, dtype=dtype, device=device),
             nn.ReLU(),
-            nn.Linear(hidden_size, hidden_size, device=device),
+            nn.Linear(hidden_size, hidden_size, dtype=dtype, device=device),
             nn.ReLU(),
-            nn.Linear(hidden_size, hidden_size // 2, device=device),
+            nn.Linear(hidden_size, hidden_size // 2, dtype=dtype, device=device),
             nn.ReLU(),
         )
 
-        self.policy = nn.Linear(hidden_size // 2, N_BOARD + 2, device=device)
+        self.policy = nn.Linear(hidden_size // 2, N_BOARD + 2, dtype=dtype, device=device)
 
         self.value = nn.Sequential(
-            nn.Linear(hidden_size // 2, 32, device=device), nn.ReLU(), nn.Linear(32, 1, device=device), nn.Tanh()
+            nn.Linear(hidden_size // 2, 32, dtype=dtype, device=device),
+            nn.ReLU(),
+            nn.Linear(32, 1, dtype=dtype, device=device),
+            nn.Tanh(),
         )
 
     def forward(self, x):
@@ -56,20 +61,20 @@ class UrNet(nn.Module):
         return policy_logits, value
 
 
-def board_to_tensor(board, device):
+def board_to_tensor(board, *, device):
     """Convert board state to tensor (normalized)."""
     board_norm = board.astype(np.float32) / N_PIECE
-    return torch.from_numpy(board_norm.flatten()).to(device)
+    return torch.from_numpy(board_norm.flatten()).to(device).to(dtype)
 
 
-def get_move_mask(moves, device):
+def get_move_mask(moves, *, device):
     """Create mask for legal moves.
 
     Returns:
         mask: Tensor with 0 for legal starting positions, -inf for illegal
         move_map: Dict mapping board positions to actual moves
     """
-    mask = torch.full((N_BOARD + 2,), float("-inf"), device=device)
+    mask = torch.full((N_BOARD + 2,), float("-inf"), dtype=dtype, device=device)
     move_map = {}
 
     for start, end in moves:
@@ -99,13 +104,14 @@ def select_move(net, board, player, moves, *, device, temperature=1.0, training=
     if not moves:
         return None, 0.0, None
 
-    board_tensor = board_to_tensor(board, device).unsqueeze(0)
+    board_tensor = board_to_tensor(board, device=device).unsqueeze(0)
 
     with torch.inference_mode():
+        net = net.to(device)
         policy_logits, value = net(board_tensor)
         policy_logits = policy_logits.squeeze(0)
 
-        mask, move_map = get_move_mask(moves, device)
+        mask, move_map = get_move_mask(moves, device=device)
         masked_logits = policy_logits + mask
 
         probs = torch.softmax(masked_logits / temperature, dim=0)
@@ -146,7 +152,7 @@ def create_policy_neural(model_path):
     net.eval()
 
     def policy_neural(board, player, moves, **kwargs):
-        move, _, _ = select_move(net, board, player, moves, device, training=False)
+        move, _, _ = select_move(net, board, player, moves, device=device, training=False)
         return move
 
     return policy_neural
@@ -187,13 +193,17 @@ def self_play_game(net, temperature, device):
     iteration = 0
     max_iterations = 1000
 
+    net = net.to(device)
+
     while iteration < max_iterations:
         dice = throw()
         moves = get_legal_moves(board, player, dice)
 
         if moves:
             std_board = standardize_state(board, player)
-            move, value, probs = select_move(net, std_board, player, moves, device, temperature, training=True)
+            move, value, probs = select_move(
+                net, std_board, player, moves, device=device, temperature=temperature, training=True
+            )
 
             if move:
                 # Convert probs to numpy immediately to avoid keeping GPU tensors
@@ -222,18 +232,18 @@ def self_play_game(net, temperature, device):
     return []
 
 
-def train_batch(net, optimizer, batch, device):
+def train_batch(net, optimizer, batch, *, device):
     """Train on a batch of experiences."""
     if not batch:
         return 0.0, 0.0, 0.0
 
     boards_np = np.stack([exp["board"].astype(np.float32) / N_PIECE for exp in batch])
-    boards = torch.from_numpy(boards_np.reshape(len(batch), -1)).to(device)
+    boards = torch.from_numpy(boards_np.reshape(len(batch), -1)).to(device).to(dtype)
 
     move_probs_np = np.stack([exp["move_probs"] for exp in batch])
-    target_probs = torch.from_numpy(move_probs_np).to(device)
+    target_probs = torch.from_numpy(move_probs_np).to(device).to(dtype)
 
-    rewards = torch.tensor([exp["reward"] for exp in batch], dtype=torch.float32, device=device)
+    rewards = torch.tensor([exp["reward"] for exp in batch], dtype=dtype, device=device)
 
     policy_logits, values = net(boards)
     values = values.squeeze()
@@ -389,8 +399,7 @@ def train(
         net: Trained network
     """
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    logger.trace("Initializing AlphaUr training")
-    logger.trace(f"Device: {device}")
+    logger.trace(f"{device=}")
 
     net = UrNet(device=device)
     optimizer = optim.Adam(net.parameters(), lr=0.003)
@@ -404,7 +413,7 @@ def train(
 
         net.eval()  # Set to eval mode for inference
 
-        tasks = [(net, device, temperature) for _ in range(batch_size)]
+        tasks = [(net, temperature, device) for _ in range(batch_size)]
         for experiences in parallel_map(self_play_game, tasks):
             for exp_board, exp_probs, reward in experiences:
                 buffer.add(exp_board, exp_probs, reward)
@@ -420,7 +429,7 @@ def train(
 
             for _ in range(num_batches):
                 batch = buffer.sample(batch_size)
-                loss, p_loss, v_loss = train_batch(net, optimizer, batch, device)
+                loss, p_loss, v_loss = train_batch(net, optimizer, batch, device=device)
                 total_loss += loss
                 total_policy_loss += p_loss
                 total_value_loss += v_loss
@@ -468,6 +477,8 @@ def train(
 
 
 if __name__ == "__main__":
+    configure_logger()
+
     # Train the agent
     trained_net = train(
         num_iterations=500,
