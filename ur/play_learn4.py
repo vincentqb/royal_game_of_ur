@@ -346,7 +346,7 @@ def compare_pairwise(results):
     return results
 
 
-def evaluate_models(model_paths, baseline_policies, num_games=100):
+def evaluate_models(model_paths, baseline_policies, num_games=50):
     """Evaluate multiple models against baseline policies using ELO.
 
     Args:
@@ -382,8 +382,9 @@ def evaluate_models(model_paths, baseline_policies, num_games=100):
 
 
 def train(
+    batch_size=50,
+    num_batches=100,
     num_iterations=500,
-    batch_size=64,
     eval_interval=10,
     save_interval=50,
 ):
@@ -422,7 +423,7 @@ def train(
         if len(buffer) >= batch_size:
             net.train()  # Set to train mode
 
-            num_batches = min(100, len(buffer) // batch_size)
+            num_batches = min(num_batches, len(buffer) // batch_size)
             total_loss = 0.0
             total_policy_loss = 0.0
             total_value_loss = 0.0
@@ -446,7 +447,7 @@ def train(
             torch.save(net.state_dict(), eval_path)
 
             logger.info("\nEvaluating against baseline policies...")
-            elos, pairwise = evaluate_models([eval_path], ["policy_random", "policy_aggressive"], num_games=50)
+            elos, pairwise = evaluate_models([eval_path], ["policy_random", "policy_aggressive"])
 
             neural_elo = elos.get(eval_path, 1000)
             baseline_avg_elo = elos.drop(eval_path).mean()
@@ -480,12 +481,7 @@ if __name__ == "__main__":
     configure_logger()
 
     # Train the agent
-    trained_net = train(
-        num_iterations=500,
-        batch_size=128,
-        eval_interval=10,
-        save_interval=50,
-    )
+    trained_net = train()
 
     # Save final model
     torch.save(trained_net.state_dict(), "ur_final_model.pt")
