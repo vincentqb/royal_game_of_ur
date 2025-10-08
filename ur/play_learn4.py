@@ -232,20 +232,30 @@ def self_play_game(net, temperature, device):
 
     training_data = []
     last_player = experiences[-1][1]
-    final_score = experiences[-1][0][0, -1] - experiences[-1][0][1, -1]
+    last_score = experiences[-1][0][0, -1]
+    opponent_score = experiences[-1][0][1, -1]
+    diff_score = (last_score - opponent_score) / N_PIECE
     for i, (exp_board, exp_player, exp_probs) in enumerate(experiences):
-        if not winner:
-            # NOTE No winners
+        if winner and exp_player == winner[0]:
+            reward = 0.3
+        elif winner and exp_player != winner[0]:
+            reward = 0.3
+        else:
             reward = 0.0
-        elif winner[0] == exp_player:
-            reward = 100.0
+
+        if diff_score > 0:
+            if exp_player == last_player:
+                reward += diff_score
+            else:
+                reward -= diff_score
+        elif diff_score < 0:
+            if exp_player == last_player:
+                reward -= diff_score
+            else:
+                reward += diff_score
         else:
-            reward = -100.0
-        if exp_player == last_player:
-            reward += final_score
-        else:
-            reward -= final_score
-        reward = discount_factor ** (len(experiences) - i) * reward
+            reward += 0
+        reward = np.clip(reward, a_min=-1.0, a_max=1.0)
         training_data.append((exp_board, exp_probs, reward))
     return training_data
 
