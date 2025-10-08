@@ -199,6 +199,8 @@ def self_play_game(net, temperature, device):
 
     net = net.to(device)
 
+    discount_factor = 1.0
+
     while iteration < max_iterations:
         dice = throw()
         moves = get_legal_moves(board, player, dice)
@@ -224,18 +226,28 @@ def self_play_game(net, temperature, device):
 
         winner = determine_winner(board)
         if winner:
-            training_data = []
-            for exp_board, exp_player, exp_probs in experiences:
-                # TODO add a small contribution corresponding to point difference
-                # e.g. + (saved pieces - other player's saved pieces) / (number of pieces)
-                reward = 1.0 if exp_player == winner[0] else -1.0
-                training_data.append((exp_board, exp_probs, reward))
-
-            return training_data
+            break
 
         iteration += 1
 
-    return []
+    training_data = []
+    last_player = experiences[-1][1]
+    final_score = experiences[-1][0][0, -1] - experiences[-1][0][1, -1]
+    for i, (exp_board, exp_player, exp_probs) in enumerate(experiences):
+        if not winner:
+            # NOTE No winners
+            reward = 0.0
+        elif winner[0] == exp_player:
+            reward = 100.0
+        else:
+            reward = -100.0
+        if exp_player == last_player:
+            reward += final_score
+        else:
+            reward -= final_score
+        reward = discount_factor ** (len(experiences) - i) * reward
+        training_data.append((exp_board, exp_probs, reward))
+    return training_data
 
 
 def train_batch(net, optimizer, batch, *, device):
