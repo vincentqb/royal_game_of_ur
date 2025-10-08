@@ -284,7 +284,7 @@ def train_batch(net, optimizer, batch, *, device):
     value_loss = ((values - rewards) ** 2).mean()
 
     # Total loss
-    alpha = 0.1
+    alpha = 0.5
     loss = alpha * policy_loss + (1 - alpha) * value_loss
 
     optimizer.zero_grad()
@@ -434,7 +434,7 @@ def train(
     logger.trace(f"{device=}")
 
     net = UrNet(device=device)
-    optimizer = optim.Adam(net.parameters(), lr=0.003)
+    optimizer = optim.Adam(net.parameters(), lr=0.001)
     buffer = ReplayBuffer()
 
     best_elo = 0.0
