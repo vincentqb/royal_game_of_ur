@@ -262,7 +262,7 @@ def train_batch(net, optimizer, batch, *, device):
     value_loss = ((values - rewards) ** 2).mean()
 
     # Total loss
-    alpha = 0.9
+    alpha = 0.1
     loss = alpha * policy_loss + (1 - alpha) * value_loss
 
     optimizer.zero_grad()
@@ -419,7 +419,7 @@ def train(
 
     for iteration in trange(num_iterations, ncols=0, desc="Epoch"):
         # Self-play phase (parallel with threading)
-        temperature = max(0.5, 2.0 - iteration / num_iterations / 2.0)
+        temperature = max(0.5, 3.0 - 3.0 * iteration / num_iterations)
 
         net.eval()  # Set to eval mode for inference
 
