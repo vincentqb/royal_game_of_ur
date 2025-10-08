@@ -481,6 +481,7 @@ def train(
             neural_elo = elos[eval_path]
 
             if neural_elo > best_elo:
+                best_elo = neural_elo
                 filename = "ur_best_model.pt"
                 torch.save(net.state_dict(), filename)
                 logger.debug(f"New best model saved saved to {filename}")
