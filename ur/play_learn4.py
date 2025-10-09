@@ -240,13 +240,9 @@ def self_play_game(net, temperature, device):
     # Calculate rewards based on outcome
     training_data = []
 
-    # Get final scores from the final board state
+    # Get final scores from the final board state, normalized to [-1, 1]
     # Note: experiences store standardized boards, so get from actual game board
-    final_p0_score = board[0, -1]  # Player 0's scored pieces
-    final_p1_score = board[1, -1]  # Player 1's scored pieces
-
-    # Calculate score margin normalized to [-1, 1]
-    score_margin = (final_p0_score - final_p1_score) / N_PIECE
+    score_margin = (board[0, -1] - board[1, -1]) / N_PIECE
 
     for exp_board, exp_player, exp_probs in experiences:
         if winner:
@@ -255,19 +251,19 @@ def self_play_game(net, temperature, device):
                 base_reward = +1
             else:
                 base_reward = -1
-
-            # Margin bonus/penalty (from this player's perspective)
-            if exp_player == 0:
-                margin_reward = score_margin
-            else:
-                margin_reward = score_margin
-
-            # Combine: winner gets base + margin, loser gets base - margin
-            alpha = 0.5
-            reward = alpha * base_reward + (1 - alpha) * margin_reward
         else:
             # Draw or timeout
-            reward = 0.0
+            base_reward = 0.0
+
+        # Margin bonus/penalty
+        if exp_player == 0:
+            margin_reward = score_margin
+        else:
+            margin_reward = score_margin
+
+        # Combine: winner gets base + margin, loser gets base - margin
+        alpha = 0.7
+        reward = alpha * base_reward + (1 - alpha) * margin_reward
 
         # Clip to valid range
         reward = np.clip(reward, -1, 1)
