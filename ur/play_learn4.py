@@ -1,6 +1,8 @@
 import random
 from collections import deque
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
+from datetime import datetime
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -130,6 +132,20 @@ def select_move(net, board, player, moves, *, device, temperature=1.0, training=
         return move, value.item(), probs
 
 
+def load_model(model_path, device):
+    """Load model from checkpoint."""
+    net = UrNet(device=device)
+    checkpoint = torch.load(model_path, map_location=device, weights_only=True)
+
+    if isinstance(checkpoint, dict) and "model_state_dict" in checkpoint:
+        net.load_state_dict(checkpoint["model_state_dict"])
+    else:
+        net.load_state_dict(checkpoint)
+
+    net.eval()
+    return net
+
+
 def create_policy_neural(model_path):
     """
     Create a policy_neural function for a specific model.
@@ -144,15 +160,7 @@ def create_policy_neural(model_path):
         Policy function compatible with play_one interface
     """
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    net = UrNet(device=device)
-    checkpoint = torch.load(model_path, map_location=device)
-
-    if "model_state_dict" in checkpoint:
-        net.load_state_dict(checkpoint["model_state_dict"])
-    else:
-        net.load_state_dict(checkpoint)
-
-    net.eval()
+    net = load_model(model_path, device)
 
     def policy_neural(board, player, moves, **kwargs):
         move, _, _ = select_move(net, board, player, moves, device=device, training=False)
@@ -412,6 +420,8 @@ def evaluate_models(model_paths, baseline_policies, num_games=50):
 
 
 def train(
+    *,
+    exp_dir,
     batch_size=50,
     num_batches=100,
     num_iterations=500,
@@ -422,7 +432,9 @@ def train(
     Main training loop.
 
     Args:
+        exp_dir: Path to experiment directory
         batch_size: Training batch size
+        num_batches: Number of training batches per iteration
         num_iterations: Number of training iterations
         eval_interval: Evaluate every N iterations
         save_interval: Save model every N iterations
@@ -438,6 +450,8 @@ def train(
     buffer = ReplayBuffer()
 
     best_elo = 0.0
+    best_model_path = exp_dir / "best_model.pt"
+    eval_model_path = exp_dir / "eval_temp.pt"
 
     for iteration in trange(num_iterations, ncols=0, desc="Epoch"):
         # Self-play phase (parallel with threading)
@@ -474,33 +488,30 @@ def train(
 
         # Evaluation phase
         if (iteration + 1) % eval_interval == 0:
-            eval_path = "ur_eval_temp.pt"
-            torch.save(net.state_dict(), eval_path)
+            # Save current model for evaluation
+            torch.save(net.state_dict(), eval_model_path)
 
-            elos, pairwise = evaluate_models([eval_path], ["policy_random", "policy_aggressive"])
-            neural_elo = elos[eval_path]
+            elos, pairwise = evaluate_models([str(eval_model_path)], ["policy_random", "policy_aggressive"])
+            neural_elo = elos[str(eval_model_path)]
 
             if neural_elo > best_elo:
                 best_elo = neural_elo
-                filename = "ur_best_model.pt"
-                torch.save(net.state_dict(), filename)
-                logger.debug(f"New best model saved to {filename}")
+                torch.save(net.state_dict(), best_model_path)
                 logger.success(f"New best model with ELO: {neural_elo:.0f}")
 
         # Save checkpoint
         if (iteration + 1) % save_interval == 0:
-            filename = f"ur_checkpoint_{iteration + 1:05d}.pt"
+            checkpoint_path = exp_dir / f"checkpoint_{iteration + 1:05d}.pt"
             torch.save(
                 {
                     "iteration": iteration,
                     "model_state_dict": net.state_dict(),
                     "optimizer_state_dict": optimizer.state_dict(),
-                    "current_elo": neural_elo,
                     "best_elo": best_elo,
                 },
-                filename,
+                checkpoint_path,
             )
-            logger.debug(f"Checkpoint saved to {filename}")
+            logger.debug(f"Checkpoint saved to {checkpoint_path}")
 
     logger.success(f"Best ELO: {best_elo:.0f}")
 
@@ -510,17 +521,23 @@ def train(
 if __name__ == "__main__":
     configure_logger()
 
+    # Create experiment directory
+    experiment_id = datetime.now().strftime("%Y%m%d_%H%M%S")
+    exp_dir = Path(f"experiments/{experiment_id}")
+    exp_dir.mkdir(parents=True, exist_ok=True)
+    logger.info(f"Experiment directory: {exp_dir}")
+
     # Train the agent
-    trained_net = train()
+    trained_net = train(exp_dir=exp_dir)
 
     # Save final model
-    filename = "ur_final_model.pt"
-    torch.save(trained_net.state_dict(), filename)
-    logger.info(f"\nFinal model saved as '{filename}'")
+    final_model_path = exp_dir / "final_model.pt"
+    torch.save(trained_net.state_dict(), final_model_path)
+    logger.info(f"\nFinal model saved as '{final_model_path}'")
 
     # Final evaluation
     evaluate_models(
-        ["ur_final_model.pt"],
+        [str(final_model_path)],
         ["policy_random", "policy_aggressive", "policy_first", "policy_last"],
         num_games=200,
     )
