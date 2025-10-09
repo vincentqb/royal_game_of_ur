@@ -27,8 +27,9 @@ from tqdm import tqdm, trange
 dtype = torch.float32
 
 
-def configure_logger():
+def configure_logger(exp_dir):
     logger.remove()
+    logger.add(exp_dir / "trace.log", level="TRACE", enqueue=True)
     logger.add(lambda msg: tqdm.write(msg, end=""), colorize=True, level="INFO")
 
 
@@ -529,12 +530,13 @@ def train(
 
 
 if __name__ == "__main__":
-    configure_logger()
 
     # Create experiment directory
     experiment_id = datetime.now().strftime("%Y%m%d_%H%M%S")
     exp_dir = Path(f"experiments/{experiment_id}")
     exp_dir.mkdir(parents=True, exist_ok=True)
+
+    configure_logger(exp_dir)
     logger.info(f"Experiment directory: {exp_dir}")
 
     # Train the agent
