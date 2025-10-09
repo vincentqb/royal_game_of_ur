@@ -249,7 +249,7 @@ def self_play_game(net, temperature, device):
 
     # Get final scores from the final board state, normalized to [-1, 1]
     # Note: experiences store standardized boards, so get from actual game board
-    score_margin = (board[0, -1] - board[1, -1]) / N_PIECE
+    score_margin = (board[0, -1].item() - board[1, -1].item()) / N_PIECE
 
     for exp_board, exp_player, exp_probs in experiences:
         if winner:
