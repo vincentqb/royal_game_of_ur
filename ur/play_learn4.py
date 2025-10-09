@@ -425,7 +425,6 @@ def train(
     batch_size=50,
     num_batches=100,
     num_iterations=500,
-    eval_interval=10,
     save_interval=50,
 ):
     """
@@ -436,8 +435,7 @@ def train(
         batch_size: Training batch size
         num_batches: Number of training batches per iteration
         num_iterations: Number of training iterations
-        eval_interval: Evaluate every N iterations
-        save_interval: Save model every N iterations
+        save_interval: Save and evaluate model every N iterations
 
     Returns:
         net: Trained network
@@ -451,7 +449,6 @@ def train(
 
     best_elo = 0.0
     best_model_path = exp_dir / "best_model.pt"
-    eval_model_path = exp_dir / "eval_temp.pt"
 
     for iteration in trange(num_iterations, ncols=0, desc="Epoch"):
         # Self-play phase (parallel with threading)
@@ -486,32 +483,36 @@ def train(
 
             logger.info(f"Loss: {avg_loss:.4f} - Policy: {avg_p_loss:.4f} - Value: {avg_v_loss:.4f}")
 
-        # Evaluation phase
-        if (iteration + 1) % eval_interval == 0:
-            # Save current model for evaluation
-            torch.save(net.state_dict(), eval_model_path)
-
-            elos, pairwise = evaluate_models([str(eval_model_path)], ["policy_random", "policy_aggressive"])
-            neural_elo = elos[str(eval_model_path)]
-
-            if neural_elo > best_elo:
-                best_elo = neural_elo
-                torch.save(net.state_dict(), best_model_path)
-                logger.success(f"New best model with ELO: {neural_elo:.0f}")
-
-        # Save checkpoint
+        # Save checkpoint and evaluate
         if (iteration + 1) % save_interval == 0:
             checkpoint_path = exp_dir / f"checkpoint_{iteration + 1:05d}.pt"
+
+            # Evaluate current model
+            elos, pairwise = evaluate_models([str(checkpoint_path)], ["policy_random", "policy_aggressive"])
+            neural_elo = elos[str(checkpoint_path)]
+
+            # Save checkpoint with all metadata
+            is_best = neural_elo > best_elo
             torch.save(
                 {
                     "iteration": iteration,
                     "model_state_dict": net.state_dict(),
                     "optimizer_state_dict": optimizer.state_dict(),
-                    "best_elo": best_elo,
+                    "elo": neural_elo,
+                    "best_elo": neural_elo if is_best else best_elo,
+                    "is_best": is_best,
                 },
                 checkpoint_path,
             )
             logger.debug(f"Checkpoint saved to {checkpoint_path}")
+
+            # Update best model symlink if this is the best
+            if is_best:
+                best_elo = neural_elo
+                if best_model_path.exists() or best_model_path.is_symlink():
+                    best_model_path.unlink()
+                best_model_path.symlink_to(checkpoint_path.name)
+                logger.success(f"New best model with ELO: {neural_elo:.0f}")
 
     logger.success(f"Best ELO: {best_elo:.0f}")
 
@@ -530,14 +531,11 @@ if __name__ == "__main__":
     # Train the agent
     trained_net = train(exp_dir=exp_dir)
 
-    # Save final model
-    final_model_path = exp_dir / "final_model.pt"
-    torch.save(trained_net.state_dict(), final_model_path)
-    logger.info(f"\nFinal model saved as '{final_model_path}'")
-
-    # Final evaluation
-    evaluate_models(
-        [str(final_model_path)],
-        ["policy_random", "policy_aggressive", "policy_first", "policy_last"],
-        num_games=200,
-    )
+    # Final evaluation using best model
+    best_model_path = exp_dir / "best_model.pt"
+    if best_model_path.exists():
+        evaluate_models(
+            [str(best_model_path)],
+            ["policy_random", "policy_aggressive", "policy_first", "policy_last"],
+            num_games=200,
+        )
