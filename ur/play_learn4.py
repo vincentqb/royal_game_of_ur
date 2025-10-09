@@ -450,7 +450,7 @@ def train(
     buffer = ReplayBuffer()
 
     best_elo = 0.0
-    best_model_link = exp_dir / "best_model.pt"
+    best_model_path = exp_dir / "best_model.pt"
 
     for iteration in trange(num_iterations, ncols=0, desc="Epoch"):
         # Self-play phase (parallel with threading)
