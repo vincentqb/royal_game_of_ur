@@ -199,8 +199,6 @@ def self_play_game(net, temperature, device):
 
     net = net.to(device)
 
-    discount_factor = 1.0
-
     while iteration < max_iterations:
         dice = throw()
         moves = get_legal_moves(board, player, dice)
@@ -236,26 +234,28 @@ def self_play_game(net, temperature, device):
     opponent_score = experiences[-1][0][1, -1]
     diff_score = (last_score - opponent_score) / N_PIECE
     for i, (exp_board, exp_player, exp_probs) in enumerate(experiences):
+        reward_win = reward_score = 0
+
         if winner and exp_player == winner[0]:
-            reward = 0.3
+            reward_win = +1
         elif winner and exp_player != winner[0]:
-            reward = 0.3
-        else:
-            reward = 0.0
+            reward_win = -1
 
         if diff_score > 0:
             if exp_player == last_player:
-                reward += diff_score
+                reward_score = +diff_score
             else:
-                reward -= diff_score
+                reward_score = -diff_score
         elif diff_score < 0:
             if exp_player == last_player:
-                reward -= diff_score
+                reward_score = -diff_score
             else:
-                reward += diff_score
-        else:
-            reward += 0
-        reward = np.clip(reward, a_min=-1.0, a_max=1.0)
+                reward_score = +diff_score
+
+        alpha = 0.6
+        reward = alpha * reward_win + (1 - alpha) * reward_score
+        reward = np.clip(reward, a_min=-1, a_max=+1)
+
         training_data.append((exp_board, exp_probs, reward))
     return training_data
 
