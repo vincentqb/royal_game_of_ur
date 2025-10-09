@@ -220,7 +220,6 @@ def self_play_game(net, temperature, device):
             )
 
             if move:
-                # Convert probs to numpy immediately to avoid keeping GPU tensors
                 experiences.append((std_board.copy(), player, probs.cpu().numpy()))
                 execute_move(board, player, *move)
 
@@ -238,35 +237,43 @@ def self_play_game(net, temperature, device):
 
         iteration += 1
 
+    # Calculate rewards based on outcome
     training_data = []
-    last_player = experiences[-1][1]
-    last_score = experiences[-1][0][0, -1]
-    opponent_score = experiences[-1][0][1, -1]
-    diff_score = (last_score - opponent_score) / N_PIECE
-    for i, (exp_board, exp_player, exp_probs) in enumerate(experiences):
-        reward_win = reward_score = 0
 
-        if winner and exp_player == winner[0]:
-            reward_win = +1
-        elif winner and exp_player != winner[0]:
-            reward_win = -1
+    # Get final scores from the final board state
+    # Note: experiences store standardized boards, so get from actual game board
+    final_p0_score = board[0, -1]  # Player 0's scored pieces
+    final_p1_score = board[1, -1]  # Player 1's scored pieces
 
-        if diff_score > 0:
-            if exp_player == last_player:
-                reward_score = +diff_score
+    # Calculate score margin normalized to [-1, 1]
+    score_margin = (final_p0_score - final_p1_score) / N_PIECE
+
+    for exp_board, exp_player, exp_probs in experiences:
+        if winner:
+            # Base win/loss reward
+            if exp_player == winner[0]:
+                base_reward = +1
             else:
-                reward_score = -diff_score
-        elif diff_score < 0:
-            if exp_player == last_player:
-                reward_score = -diff_score
-            else:
-                reward_score = +diff_score
+                base_reward = -1
 
-        alpha = 0.6
-        reward = alpha * reward_win + (1 - alpha) * reward_score
-        reward = np.clip(reward, a_min=-1, a_max=+1)
+            # Margin bonus/penalty (from this player's perspective)
+            if exp_player == 0:
+                margin_reward = score_margin
+            else:
+                margin_reward = score_margin
+
+            # Combine: winner gets base + margin, loser gets base - margin
+            alpha = 0.5
+            reward = alpha * base_reward + (1 - alpha) * margin_reward
+        else:
+            # Draw or timeout
+            reward = 0.0
+
+        # Clip to valid range
+        reward = np.clip(reward, -1, 1)
 
         training_data.append((exp_board, exp_probs, reward))
+
     return training_data
 
 
@@ -530,7 +537,6 @@ def train(
 
 
 if __name__ == "__main__":
-
     # Create experiment directory
     experiment_id = datetime.now().strftime("%Y%m%d_%H%M%S")
     exp_dir = Path(f"experiments/{experiment_id}")
