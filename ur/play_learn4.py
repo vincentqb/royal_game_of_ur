@@ -1,4 +1,5 @@
 import random
+import warnings
 from collections import deque
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 from datetime import datetime
@@ -31,6 +32,12 @@ def configure_logger(exp_dir):
     logger.remove()
     logger.add(exp_dir / "trace.log", level="TRACE", enqueue=True)
     logger.add(lambda msg: tqdm.write(msg, end=""), colorize=True, level="INFO")
+
+    def showwarning_to_loguru(message, category, filename, lineno, file=None, line=None):
+        formatted_message = warnings.formatwarning(message, category, filename, lineno, line)
+        logger.warning(formatted_message)
+
+    warnings.showwarning = showwarning_to_loguru
 
 
 class UrNet(nn.Module):
