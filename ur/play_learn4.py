@@ -484,12 +484,12 @@ def train(
                 best_elo = neural_elo
                 filename = "ur_best_model.pt"
                 torch.save(net.state_dict(), filename)
-                logger.debug(f"New best model saved saved to {filename}")
-                logger.success(f"New best model saved - ELO: {neural_elo:.0f}")
+                logger.debug(f"New best model saved to {filename}")
+                logger.success(f"New best model with ELO: {neural_elo:.0f}")
 
         # Save checkpoint
         if (iteration + 1) % save_interval == 0:
-            filename = f"ur_checkpoint_{iteration + 1}.pt"
+            filename = f"ur_checkpoint_{iteration + 1:05d}.pt"
             torch.save(
                 {
                     "iteration": iteration,
