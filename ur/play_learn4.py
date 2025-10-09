@@ -159,7 +159,8 @@ def create_policy_neural(model_path):
     Returns:
         Policy function compatible with play_one interface
     """
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = torch.device("cpu")
     net = load_model(model_path, device)
 
     def policy_neural(board, player, moves, **kwargs):
@@ -422,8 +423,8 @@ def evaluate_models(model_paths, baseline_policies, num_games=50):
 def train(
     *,
     exp_dir,
-    batch_size=50,
-    num_batches=100,
+    batch_size=20,
+    num_batches=500,
     num_iterations=500,
     save_interval=50,
 ):
@@ -432,7 +433,7 @@ def train(
 
     Args:
         exp_dir: Path to experiment directory
-        batch_size: Training batch size
+        batch_size: Number of self-play games per iteration
         num_batches: Number of training batches per iteration
         num_iterations: Number of training iterations
         save_interval: Save and evaluate model every N iterations
@@ -440,8 +441,9 @@ def train(
     Returns:
         net: Trained network
     """
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    logger.trace(f"{device=}")
+    # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = torch.device("cpu")
+    logger.trace(f"Using device: {device}")
 
     net = UrNet(device=device)
     optimizer = optim.Adam(net.parameters(), lr=0.001)
