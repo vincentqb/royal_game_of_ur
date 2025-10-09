@@ -448,7 +448,7 @@ def train(
     buffer = ReplayBuffer()
 
     best_elo = 0.0
-    best_model_path = exp_dir / "best_model.pt"
+    best_model_link = exp_dir / "best_model.pt"
 
     for iteration in trange(num_iterations, ncols=0, desc="Epoch"):
         # Self-play phase (parallel with threading)
@@ -487,24 +487,31 @@ def train(
         if (iteration + 1) % save_interval == 0:
             checkpoint_path = exp_dir / f"checkpoint_{iteration + 1:05d}.pt"
 
-            # Evaluate current model
-            elos, pairwise = evaluate_models([str(checkpoint_path)], ["policy_random", "policy_aggressive"])
-            neural_elo = elos[str(checkpoint_path)]
-
-            # Save checkpoint with all metadata
-            is_best = neural_elo > best_elo
             torch.save(
                 {
                     "iteration": iteration,
                     "model_state_dict": net.state_dict(),
                     "optimizer_state_dict": optimizer.state_dict(),
-                    "elo": neural_elo,
-                    "best_elo": neural_elo if is_best else best_elo,
-                    "is_best": is_best,
                 },
                 checkpoint_path,
             )
             logger.debug(f"Checkpoint saved to {checkpoint_path}")
+
+            # Now evaluate the saved model
+            elos, pairwise = evaluate_models([str(checkpoint_path)], ["policy_random", "policy_aggressive"])
+            neural_elo = elos[str(checkpoint_path)]
+
+            # Update checkpoint with ELO metadata
+            is_best = neural_elo > best_elo
+            # checkpoint = torch.load(checkpoint_path, weights_only=False)
+            # checkpoint.update(
+            #     {
+            #         "elo": neural_elo,
+            #         "best_elo": neural_elo if is_best else best_elo,
+            #         "is_best": is_best,
+            #     }
+            # )
+            # torch.save(checkpoint, checkpoint_path)
 
             # Update best model symlink if this is the best
             if is_best:
