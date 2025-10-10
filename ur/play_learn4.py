@@ -470,8 +470,8 @@ def train(
     best_model_path = exp_dir / "best_model.pt"
 
     for iteration in trange(num_iterations, ncols=0, desc="Epoch"):
-        # Self-play phase (parallel with threading)
-        temperature = max(0.5, 3.0 - 3.0 * iteration / num_iterations)
+        # Self-play phase
+        temperature = max(0.5, 3.0 - 2.5 * iteration / num_iterations)
 
         net.eval()  # Set to eval mode for inference
 
