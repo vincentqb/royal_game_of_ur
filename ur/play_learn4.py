@@ -443,7 +443,7 @@ def train(
     batch_size=20,
     num_batches=500,
     num_iterations=500,
-    save_interval=50,
+    save_interval=25,
 ):
     """
     Main training loop.
