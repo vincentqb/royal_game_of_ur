@@ -181,7 +181,7 @@ def create_policy_neural(model_path):
 class ReplayBuffer:
     """Experience replay buffer."""
 
-    def __init__(self, max_size=50000):
+    def __init__(self, max_size=5000):
         self.buffer = deque(maxlen=max_size)
 
     def add(self, board, move_probs, reward):
