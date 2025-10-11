@@ -252,12 +252,12 @@ def self_play_game(net, temperature, device):
         if winner:
             # Base win/loss reward
             if exp_player == winner[0]:
-                base_reward = +1
+                base_reward = +1.0
             else:
-                base_reward = -1
+                base_reward = -1.0
         else:
             # Draw or timeout
-            base_reward = 0
+            base_reward = 0.0
 
         # Margin bonus/penalty
         # if exp_player == 0:
@@ -270,7 +270,7 @@ def self_play_game(net, temperature, device):
 
         # Combine: winner gets base + margin, loser gets base - margin
         alpha = 0.7
-        reward = alpha * (discount_rate ** (len(experiences) - i)) * base_reward + (1 - alpha) * margin_reward
+        reward = alpha * (discount_rate ** (len(experiences) - i)) * base_reward + (1.0 - alpha) * margin_reward
 
         # Clip to valid range
         clip = 0.999
@@ -313,7 +313,7 @@ def train_batch(net, optimizer, batch, *, device):
     torch.nn.utils.clip_grad_norm_(net.parameters(), 1.0)
     optimizer.step()
 
-    return loss.item(), policy_loss.item(), value_loss.item()
+    return loss.item(), policy_loss.item(), value_loss.item(), rewards.sum().item()
 
 
 def parallel_map(func, args, *, max_workers=16, use_threads=True):
@@ -479,23 +479,27 @@ def train(
                 total_loss = 0.0
                 total_policy_loss = 0.0
                 total_value_loss = 0.0
+                total_reward = 0.0
 
                 for _ in range(num_batches):
                     batch = buffer.sample(batch_size)
-                    loss, p_loss, v_loss = train_batch(net, optimizer, batch, device=device)
+                    loss, p_loss, v_loss, reward = train_batch(net, optimizer, batch, device=device)
                     total_loss += loss
                     total_policy_loss += p_loss
                     total_value_loss += v_loss
+                    total_reward += reward
 
                 avg_loss = total_loss / num_batches
                 avg_p_loss = total_policy_loss / num_batches
                 avg_v_loss = total_value_loss / num_batches
+                avg_reward = total_reward / num_batches
 
                 logger.info(
-                    "Loss: {loss:.4f} - Policy: {p_loss:.4f} - Value: {v_loss:.4f}",
+                    "Iteration: {iteration} - Loss: {loss:.4f} - Policy: {p_loss:.4f} - Value: {v_loss:.4f} - Reward: {reward:.4f}",
                     loss=avg_loss,
                     p_loss=avg_p_loss,
                     v_loss=avg_v_loss,
+                    reward=avg_reward,
                     iteration=iteration,
                 )
 
