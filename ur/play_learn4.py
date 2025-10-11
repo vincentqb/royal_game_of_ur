@@ -46,21 +46,22 @@ class UrNet(nn.Module):
     def __init__(self, input_size=(N_PLAYER * (N_BOARD + 2)), hidden_size=128, device=None):
         super().__init__()
 
+        slope = 0.01
         self.shared = nn.Sequential(
             nn.Linear(input_size, hidden_size, dtype=dtype, device=device),
-            nn.ReLU(),
+            nn.LeakyReLU(slope),
             nn.Linear(hidden_size, hidden_size, dtype=dtype, device=device),
-            nn.ReLU(),
+            nn.LeakyReLU(slope),
             nn.Linear(hidden_size, hidden_size // 2, dtype=dtype, device=device),
-            nn.ReLU(),
+            nn.LeakyReLU(slope),
         )
 
         self.policy = nn.Linear(hidden_size // 2, N_BOARD + 2, dtype=dtype, device=device)
 
         self.value = nn.Sequential(
-            nn.Linear(hidden_size // 2, 32, dtype=dtype, device=device),
-            nn.ReLU(),
-            nn.Linear(32, 1, dtype=dtype, device=device),
+            nn.Linear(hidden_size // 2, hidden_size // 4, dtype=dtype, device=device),
+            nn.LeakyReLU(slope),
+            nn.Linear(hidden_size // 4, 1, dtype=dtype, device=device),
             nn.Tanh(),
         )
 
