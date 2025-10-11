@@ -30,7 +30,7 @@ dtype = torch.float32
 
 def configure_logger(exp_dir):
     logger.remove()
-    logger.add(exp_dir / "trace.log", level="TRACE", enqueue=True)
+    logger.add(exp_dir / "trace.log", level="TRACE", enqueue=True, serialize=True)
     logger.add(lambda msg: tqdm.write(msg, end=""), colorize=True, level="INFO")
 
     def showwarning_to_loguru(message, category, filename, lineno, file=None, line=None):
@@ -451,7 +451,7 @@ def train(
     """
     # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     device = torch.device("cpu")
-    logger.trace(f"Using device: {device}")
+    logger.trace("Using device: {device}", device=device)
 
     net = UrNet(device=device)
     optimizer = optim.Adam(net.parameters(), lr=0.001)
@@ -511,7 +511,7 @@ def train(
                     },
                     checkpoint_path,
                 )
-                logger.debug(f"Checkpoint saved to {checkpoint_path}")
+                logger.debug("Checkpoint saved to {path}", path=checkpoint_path)
 
                 # Now evaluate the saved model
                 elos, pairwise = evaluate_models([str(checkpoint_path)], ["policy_random", "policy_aggressive"])
@@ -535,12 +535,12 @@ def train(
                     if best_model_path.exists() or best_model_path.is_symlink():
                         best_model_path.unlink()
                     best_model_path.symlink_to(checkpoint_path.name)
-                    logger.success(f"New best model with ELO: {neural_elo:.0f}")
+                    logger.success("New best model with ELO: {elo:.0f}", elo=neural_elo)
 
-        logger.success(f"Best ELO: {best_elo:.0f}")
     except KeyboardInterrupt:
-        logger.warning(f"Training interupted by user at {iteration=}")
+        logger.warning("Training interupted by user at iteration {iteration}", iteration=iteration)
 
+    logger.success("Best ELO: {elo:.0f}", elo=best_elo)
     return checkpoint_path
 
 
