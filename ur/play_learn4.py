@@ -72,12 +72,6 @@ class UrNet(nn.Module):
         return policy_logits, value
 
 
-def board_to_tensor(board, *, device):
-    """Convert board state to normalized tensor."""
-    board_norm = board.astype(np.float32) / N_PIECE
-    return torch.from_numpy(board_norm.flatten()).to(device).to(dtype)
-
-
 def get_move_mask(moves, *, device):
     """
     Create mask for legal moves.
@@ -117,11 +111,11 @@ def select_move(net, board, player, moves, *, device, temperature=1.0, training=
     if not moves:
         return None, 0.0, None
 
-    board_tensor = board_to_tensor(board, device=device).unsqueeze(0)
+    board = torch.from_numpy(board.astype(np.float32).flatten()).to(device).to(dtype)
 
     with torch.inference_mode():
         net = net.to(device)
-        policy_logits, value = net(board_tensor)
+        policy_logits, value = net(board)
         policy_logits = policy_logits.squeeze(0)
 
         mask, move_map = get_move_mask(moves, device=device)
