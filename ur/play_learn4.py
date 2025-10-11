@@ -272,7 +272,7 @@ def self_play_game(net, temperature, device):
         #     margin_reward = -final_score_margin
 
         # Current score
-        margin_reward = (exp_board[0, -1].item() - board[1:, -1].max().item()) / N_PIECE
+        margin_reward = (exp_board[0, -1].item() - exp_board[1:, -1].max().item()) / N_PIECE
 
         # Combine: winner gets base + margin, loser gets base - margin
         alpha = 0.7
