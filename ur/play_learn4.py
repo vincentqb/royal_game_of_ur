@@ -460,91 +460,88 @@ def train(
     best_elo = 0.0
     best_model_path = exp_dir / "best_model.pt"
 
-    try:
-        for iteration in trange(num_iterations, ncols=0, desc="Epoch"):
-            net.eval()  # Set to eval mode for inference
+    for iteration in trange(num_iterations, ncols=0, desc="Epoch"):
+        net.eval()  # Set to eval mode for inference
 
-            temperature = max(0.5, 3.0 - 2.5 * iteration / num_iterations)
-            tasks = [(net, temperature, device) for _ in range(batch_size)]
-            for experiences in parallel_map(self_play_game, tasks):
-                for exp_board, exp_probs, reward in experiences:
-                    buffer.append(exp_board, exp_probs, reward)
+        temperature = max(0.5, 3.0 - 2.5 * iteration / num_iterations)
+        tasks = [(net, temperature, device) for _ in range(batch_size)]
+        for experiences in parallel_map(self_play_game, tasks):
+            for exp_board, exp_probs, reward in experiences:
+                buffer.append(exp_board, exp_probs, reward)
 
-            logger.trace("length of buffer: {length}", length=len(buffer))
+        logger.trace("length of buffer: {length}", length=len(buffer))
 
-            if len(buffer) >= batch_size:
-                net.train()
+        if len(buffer) >= batch_size:
+            net.train()
 
-                num_batches = min(num_batches, len(buffer) // batch_size)
-                total_loss = 0.0
-                total_policy_loss = 0.0
-                total_value_loss = 0.0
-                total_reward = 0.0
+            num_batches = min(num_batches, len(buffer) // batch_size)
+            total_loss = 0.0
+            total_policy_loss = 0.0
+            total_value_loss = 0.0
+            total_reward = 0.0
 
-                for _ in range(num_batches):
-                    batch = buffer.sample(batch_size)
-                    loss, p_loss, v_loss, reward = train_batch(net, optimizer, batch, device=device)
-                    total_loss += loss
-                    total_policy_loss += p_loss
-                    total_value_loss += v_loss
-                    total_reward += reward
+            for _ in range(num_batches):
+                batch = buffer.sample(batch_size)
+                loss, p_loss, v_loss, reward = train_batch(net, optimizer, batch, device=device)
+                total_loss += loss
+                total_policy_loss += p_loss
+                total_value_loss += v_loss
+                total_reward += reward
 
-                avg_loss = total_loss / num_batches
-                avg_p_loss = total_policy_loss / num_batches
-                avg_v_loss = total_value_loss / num_batches
-                avg_reward = total_reward / num_batches  # Mean absolute reward
+            avg_loss = total_loss / num_batches
+            avg_p_loss = total_policy_loss / num_batches
+            avg_v_loss = total_value_loss / num_batches
+            avg_reward = total_reward / num_batches  # Mean absolute reward
 
-                logger.info(
-                    "Loss: {loss:.4f} - Policy: {p_loss:.4f} - Value: {v_loss:.4f} - Reward: {reward:.4f}",
-                    loss=avg_loss,
-                    p_loss=avg_p_loss,
-                    v_loss=avg_v_loss,
-                    reward=avg_reward,
-                    iteration=iteration,
-                )
+            logger.info(
+                "Loss: {loss:.4f} - Policy: {p_loss:.4f} - Value: {v_loss:.4f} - Reward: {reward:.4f}",
+                loss=avg_loss,
+                p_loss=avg_p_loss,
+                v_loss=avg_v_loss,
+                reward=avg_reward,
+                iteration=iteration,
+            )
 
-            # Save checkpoint and evaluate
-            if (iteration + 1) % save_interval == 0:
-                checkpoint_path = exp_dir / f"checkpoint_{iteration + 1:05d}.pt"
+        # Save checkpoint and evaluate
+        if (iteration + 1) % save_interval == 0:
+            checkpoint_path = exp_dir / f"checkpoint_{iteration + 1:05d}.pt"
 
-                torch.save(
-                    {
-                        "iteration": iteration,
-                        "model_state_dict": net.state_dict(),
-                        "optimizer_state_dict": optimizer.state_dict(),
-                    },
-                    checkpoint_path,
-                )
-                logger.debug("Checkpoint saved to {path}", path=checkpoint_path)
+            torch.save(
+                {
+                    "iteration": iteration,
+                    "model_state_dict": net.state_dict(),
+                    "optimizer_state_dict": optimizer.state_dict(),
+                },
+                checkpoint_path,
+            )
+            logger.debug("Checkpoint saved to {path}", path=checkpoint_path)
 
-                # Now evaluate the saved model
-                elos, pairwise = evaluate_models([str(checkpoint_path), "policy_random", "policy_aggressive"])
-                neural_elo = elos[str(checkpoint_path)]
+            # Now evaluate the saved model
+            elos, pairwise = evaluate_models([str(checkpoint_path), "policy_random", "policy_aggressive"])
+            neural_elo = elos[str(checkpoint_path)]
 
-                # Update checkpoint with ELO metadata
-                is_best = neural_elo > best_elo
-                # checkpoint = torch.load(checkpoint_path, weights_only=False)
-                # checkpoint.update(
-                #     {
-                #         "elo": neural_elo,
-                #         "best_elo": neural_elo if is_best else best_elo,
-                #         "is_best": is_best,
-                #     }
-                # )
-                # torch.save(checkpoint, checkpoint_path)
+            # Update checkpoint with ELO metadata
+            is_best = neural_elo > best_elo
+            # checkpoint = torch.load(checkpoint_path, weights_only=False)
+            # checkpoint.update(
+            #     {
+            #         "elo": neural_elo,
+            #         "best_elo": neural_elo if is_best else best_elo,
+            #         "is_best": is_best,
+            #     }
+            # )
+            # torch.save(checkpoint, checkpoint_path)
 
-                # Update best model symlink if this is the best
-                if is_best:
-                    best_elo = neural_elo
-                    if best_model_path.exists() or best_model_path.is_symlink():
-                        best_model_path.unlink()
-                    best_model_path.symlink_to(checkpoint_path.name)
-                    logger.success("New best model with ELO: {elo:.0f}", elo=neural_elo)
-
-    except KeyboardInterrupt:
-        logger.warning("Training interupted by user at iteration {iteration}", iteration=iteration)
+            # Update best model symlink if this is the best
+            if is_best:
+                best_elo = neural_elo
+                if best_model_path.exists() or best_model_path.is_symlink():
+                    best_model_path.unlink()
+                best_model_path.symlink_to(checkpoint_path.name)
+                logger.success("New best model with ELO: {elo:.0f}", elo=neural_elo)
 
     logger.success("Best ELO: {elo:.0f}", elo=best_elo)
+
     return checkpoint_path
 
 
@@ -558,7 +555,11 @@ if __name__ == "__main__":
     logger.info("Experiment directory: {exp_dir}", exp_dir=exp_dir)
 
     # Train the agent
-    checkpoint_model_path = train(exp_dir=exp_dir)
+    try:
+        checkpoint_model_path = train(exp_dir=exp_dir)
+    except KeyboardInterrupt:
+        logger.warning("Training interupted by user at iteration {iteration}", iteration=iteration)
+        checkpoint_model_path = None
     best_model_path = exp_dir / "best_model.pt"
 
     # Final evaluation
@@ -570,6 +571,6 @@ if __name__ == "__main__":
     ]
     if best_model_path.exists():
         available.append(str(best_model_path))
-    if checkpoint_model_path.exists():
+    if checkpoint_model_path is not None and checkpoint_model_path.exists():
         available.append(str(checkpoint_model_path))
     evaluate_models(available, num_games=200)
