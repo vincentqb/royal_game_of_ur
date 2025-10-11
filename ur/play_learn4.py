@@ -313,7 +313,7 @@ def train_batch(net, optimizer, batch, *, device):
     torch.nn.utils.clip_grad_norm_(net.parameters(), 1.0)
     optimizer.step()
 
-    return loss.item(), policy_loss.item(), value_loss.item(), rewards.sum().item()
+    return loss.item(), policy_loss.item(), value_loss.item(), rewards.abs().sum().item()
 
 
 def parallel_map(func, args, *, max_workers=16, use_threads=True):
@@ -492,10 +492,10 @@ def train(
                 avg_loss = total_loss / num_batches
                 avg_p_loss = total_policy_loss / num_batches
                 avg_v_loss = total_value_loss / num_batches
-                avg_reward = total_reward / num_batches
+                avg_reward = total_reward / num_batches  # Mean absolute reward
 
                 logger.info(
-                    "Loss: {loss:.4f} - Policy: {p_loss:.4f} - Value: {v_loss:.4f} - Reward: {reward:+.4f}",
+                    "Loss: {loss:.4f} - Policy: {p_loss:.4f} - Value: {v_loss:.4f} - Reward: {reward:.4f}",
                     loss=avg_loss,
                     p_loss=avg_p_loss,
                     v_loss=avg_v_loss,
