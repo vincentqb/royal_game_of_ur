@@ -431,7 +431,7 @@ def evaluate_models(policies, num_games=50):
 def train(
     *,
     exp_dir,
-    batch_size=20,
+    batch_size=25,
     num_batches=500,
     num_iterations=500,
     save_interval=25,
