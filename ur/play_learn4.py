@@ -518,7 +518,7 @@ def train(
                 logger.debug("Checkpoint saved to {path}", path=checkpoint_path)
 
                 # Now evaluate the saved model
-                elos, pairwise = evaluate_models([str(checkpoint_path)], ["policy_random", "policy_aggressive"])
+                elos, pairwise = evaluate_models([str(checkpoint_path), "policy_random", "policy_aggressive"])
                 neural_elo = elos[str(checkpoint_path)]
 
                 # Update checkpoint with ELO metadata
