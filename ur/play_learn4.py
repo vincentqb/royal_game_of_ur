@@ -176,10 +176,10 @@ def create_policy_neural(model_path):
 class ReplayBuffer:
     """Experience replay buffer."""
 
-    def __init__(self, max_size=5000):
-        self.buffer = deque(maxlen=max_size)
+    def __init__(self, maxlen=50_000):
+        self.buffer = deque(maxlen=maxlen)
 
-    def add(self, board, move_probs, reward):
+    def append(self, board, move_probs, reward):
         """Add experience to buffer."""
         self.buffer.append({"board": board, "move_probs": move_probs, "reward": reward})
 
@@ -396,7 +396,7 @@ def compare_pairwise(results):
     return results
 
 
-def evaluate_models(model_paths, baseline_policies, num_games=50):
+def evaluate_models(policies, num_games=50):
     """
     Evaluate multiple models against baseline policies using ELO.
 
@@ -409,25 +409,21 @@ def evaluate_models(model_paths, baseline_policies, num_games=50):
         elos: Series of ELO ratings
         pairwise: DataFrame of pairwise win rates
     """
-    if isinstance(model_paths, dict):
-        available = list(model_paths.values()) + baseline_policies
-    else:
-        available = model_paths + baseline_policies
 
     tasks = []
     for _ in range(num_games):
-        selected = random.choices(available, k=2)
+        selected = random.choices(policies, k=2)
         tasks.append([selected])
 
     results = list(parallel_map(compare_play_wrapper, tasks))
 
     with pd.option_context("display.float_format", "{:.0f}".format):
         elos = compare_elo(results)
-        logger.info(f"\nELO Ratings:\n{elos}")
+        logger.info("\nELO Ratings:\n{elos}", elos=elos)
 
     with pd.option_context("display.float_format", "{:.4f}".format):
         pairwise = compare_pairwise(results)
-        logger.info(f"\nPairwise Win Rates:\n{pairwise}")
+        logger.info("\nPairwise Win Rates:\n{pairwise}", pairwise=pairwise)
 
     return elos, pairwise
 
@@ -464,80 +460,88 @@ def train(
     best_elo = 0.0
     best_model_path = exp_dir / "best_model.pt"
 
-    for iteration in trange(num_iterations, ncols=0, desc="Epoch"):
-        # Self-play phase
-        temperature = max(0.5, 3.0 - 2.5 * iteration / num_iterations)
+    try:
+        for iteration in trange(num_iterations, ncols=0, desc="Epoch"):
+            net.eval()  # Set to eval mode for inference
 
-        net.eval()  # Set to eval mode for inference
+            temperature = max(0.5, 3.0 - 2.5 * iteration / num_iterations)
+            tasks = [(net, temperature, device) for _ in range(batch_size)]
+            for experiences in parallel_map(self_play_game, tasks):
+                for exp_board, exp_probs, reward in experiences:
+                    buffer.append(exp_board, exp_probs, reward)
 
-        tasks = [(net, temperature, device) for _ in range(batch_size)]
-        for experiences in parallel_map(self_play_game, tasks):
-            for exp_board, exp_probs, reward in experiences:
-                buffer.add(exp_board, exp_probs, reward)
+            logger.trace("length of buffer: {length}", length=len(buffer))
 
-        # Training phase
-        if len(buffer) >= batch_size:
-            net.train()  # Set to train mode
+            if len(buffer) >= batch_size:
+                net.train()
 
-            num_batches = min(num_batches, len(buffer) // batch_size)
-            total_loss = 0.0
-            total_policy_loss = 0.0
-            total_value_loss = 0.0
+                num_batches = min(num_batches, len(buffer) // batch_size)
+                total_loss = 0.0
+                total_policy_loss = 0.0
+                total_value_loss = 0.0
 
-            for _ in range(num_batches):
-                batch = buffer.sample(batch_size)
-                loss, p_loss, v_loss = train_batch(net, optimizer, batch, device=device)
-                total_loss += loss
-                total_policy_loss += p_loss
-                total_value_loss += v_loss
+                for _ in range(num_batches):
+                    batch = buffer.sample(batch_size)
+                    loss, p_loss, v_loss = train_batch(net, optimizer, batch, device=device)
+                    total_loss += loss
+                    total_policy_loss += p_loss
+                    total_value_loss += v_loss
 
-            avg_loss = total_loss / num_batches
-            avg_p_loss = total_policy_loss / num_batches
-            avg_v_loss = total_value_loss / num_batches
+                avg_loss = total_loss / num_batches
+                avg_p_loss = total_policy_loss / num_batches
+                avg_v_loss = total_value_loss / num_batches
 
-            logger.info(f"Loss: {avg_loss:.4f} - Policy: {avg_p_loss:.4f} - Value: {avg_v_loss:.4f}")
+                logger.info(
+                    "Loss: {loss:.4f} - Policy: {p_loss:.4f} - Value: {v_loss:.4f}",
+                    loss=avg_loss,
+                    p_loss=avg_p_loss,
+                    v_loss=avg_v_loss,
+                    iteration=iteration,
+                )
 
-        # Save checkpoint and evaluate
-        if (iteration + 1) % save_interval == 0:
-            checkpoint_path = exp_dir / f"checkpoint_{iteration + 1:05d}.pt"
+            # Save checkpoint and evaluate
+            if (iteration + 1) % save_interval == 0:
+                checkpoint_path = exp_dir / f"checkpoint_{iteration + 1:05d}.pt"
 
-            torch.save(
-                {
-                    "iteration": iteration,
-                    "model_state_dict": net.state_dict(),
-                    "optimizer_state_dict": optimizer.state_dict(),
-                },
-                checkpoint_path,
-            )
-            logger.debug(f"Checkpoint saved to {checkpoint_path}")
+                torch.save(
+                    {
+                        "iteration": iteration,
+                        "model_state_dict": net.state_dict(),
+                        "optimizer_state_dict": optimizer.state_dict(),
+                    },
+                    checkpoint_path,
+                )
+                logger.debug(f"Checkpoint saved to {checkpoint_path}")
 
-            # Now evaluate the saved model
-            elos, pairwise = evaluate_models([str(checkpoint_path)], ["policy_random", "policy_aggressive"])
-            neural_elo = elos[str(checkpoint_path)]
+                # Now evaluate the saved model
+                elos, pairwise = evaluate_models([str(checkpoint_path)], ["policy_random", "policy_aggressive"])
+                neural_elo = elos[str(checkpoint_path)]
 
-            # Update checkpoint with ELO metadata
-            is_best = neural_elo > best_elo
-            # checkpoint = torch.load(checkpoint_path, weights_only=False)
-            # checkpoint.update(
-            #     {
-            #         "elo": neural_elo,
-            #         "best_elo": neural_elo if is_best else best_elo,
-            #         "is_best": is_best,
-            #     }
-            # )
-            # torch.save(checkpoint, checkpoint_path)
+                # Update checkpoint with ELO metadata
+                is_best = neural_elo > best_elo
+                # checkpoint = torch.load(checkpoint_path, weights_only=False)
+                # checkpoint.update(
+                #     {
+                #         "elo": neural_elo,
+                #         "best_elo": neural_elo if is_best else best_elo,
+                #         "is_best": is_best,
+                #     }
+                # )
+                # torch.save(checkpoint, checkpoint_path)
 
-            # Update best model symlink if this is the best
-            if is_best:
-                best_elo = neural_elo
-                if best_model_path.exists() or best_model_path.is_symlink():
-                    best_model_path.unlink()
-                best_model_path.symlink_to(checkpoint_path.name)
-                logger.success(f"New best model with ELO: {neural_elo:.0f}")
+                # Update best model symlink if this is the best
+                if is_best:
+                    best_elo = neural_elo
+                    if best_model_path.exists() or best_model_path.is_symlink():
+                        best_model_path.unlink()
+                    best_model_path.symlink_to(checkpoint_path.name)
+                    logger.success(f"New best model with ELO: {neural_elo:.0f}")
 
-    logger.success(f"Best ELO: {best_elo:.0f}")
+        logger.success(f"Best ELO: {best_elo:.0f}")
+    except KeyboardInterrupt:
+        logger.warning(f"Training interupted by user at {iteration=}")
 
-    return net
+    return checkpoint_path
 
 
 if __name__ == "__main__":
@@ -547,16 +551,21 @@ if __name__ == "__main__":
     exp_dir.mkdir(parents=True, exist_ok=True)
 
     configure_logger(exp_dir)
-    logger.info(f"Experiment directory: {exp_dir}")
+    logger.info("Experiment directory: {exp_dir}", exp_dir=exp_dir)
 
     # Train the agent
-    trained_net = train(exp_dir=exp_dir)
-
-    # Final evaluation using best model
+    checkpoint_model_path = train(exp_dir=exp_dir)
     best_model_path = exp_dir / "best_model.pt"
+
+    # Final evaluation
+    available = [
+        "policy_random",
+        "policy_aggressive",
+        "policy_first",
+        "policy_last",
+    ]
     if best_model_path.exists():
-        evaluate_models(
-            [str(best_model_path)],
-            ["policy_random", "policy_aggressive", "policy_first", "policy_last"],
-            num_games=200,
-        )
+        available.append(str(best_model_path))
+    if checkpoint_model_path.exists():
+        available.append(str(checkpoint_model_path))
+    evaluate_models(available, num_games=200)
