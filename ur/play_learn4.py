@@ -286,7 +286,7 @@ def train_batch(net, optimizer, batch, *, device):
     if not batch:
         return 0.0, 0.0, 0.0
 
-    boards_np = np.stack([exp["board"].astype(np.float32) / N_PIECE for exp in batch])
+    boards_np = np.stack([exp["board"].astype(np.float32) for exp in batch])
     boards = torch.from_numpy(boards_np.reshape(len(batch), -1)).to(device).to(dtype)
 
     move_probs_np = np.stack([exp["move_probs"] for exp in batch])
