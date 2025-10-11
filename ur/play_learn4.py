@@ -495,7 +495,7 @@ def train(
                 avg_reward = total_reward / num_batches
 
                 logger.info(
-                    "Iteration: {iteration} - Loss: {loss:.4f} - Policy: {p_loss:.4f} - Value: {v_loss:.4f} - Reward: {reward:.4f}",
+                    "Loss: {loss:.4f} - Policy: {p_loss:.4f} - Value: {v_loss:.4f} - Reward: {reward:+.4f}",
                     loss=avg_loss,
                     p_loss=avg_p_loss,
                     v_loss=avg_v_loss,
