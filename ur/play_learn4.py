@@ -284,7 +284,7 @@ def self_play_game(net, temperature, device):
 def train_batch(net, optimizer, batch, *, device):
     """Train on a batch of experiences."""
     if not batch:
-        return 0.0, 0.0, 0.0
+        return 0.0, 0.0, 0.0, 0.0
 
     boards_np = np.stack([exp["board"].astype(np.float32) for exp in batch])
     boards = torch.from_numpy(boards_np.reshape(len(batch), -1)).to(device).to(dtype)
@@ -313,7 +313,7 @@ def train_batch(net, optimizer, batch, *, device):
     torch.nn.utils.clip_grad_norm_(net.parameters(), 1.0)
     optimizer.step()
 
-    return loss.item(), policy_loss.item(), value_loss.item(), rewards.abs().sum().item()
+    return loss.item(), policy_loss.item(), value_loss.item(), rewards.abs().mean().item()
 
 
 def parallel_map(func, args, *, max_workers=16, use_threads=True):
@@ -555,12 +555,12 @@ if __name__ == "__main__":
     logger.info("Experiment directory: {exp_dir}", exp_dir=exp_dir)
 
     # Train the agent
+    best_model_path = exp_dir / "best_model.pt"
     try:
         checkpoint_model_path = train(exp_dir=exp_dir)
     except KeyboardInterrupt:
-        logger.warning("Training interupted by user at iteration {iteration}", iteration=iteration)
+        logger.warning("Training interupted by user")
         checkpoint_model_path = None
-    best_model_path = exp_dir / "best_model.pt"
 
     # Final evaluation
     available = [
