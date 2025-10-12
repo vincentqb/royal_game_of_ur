@@ -80,7 +80,7 @@ def get_move_mask(moves, *, device):
         mask: Tensor with 0 for legal starting positions, -inf for illegal
         move_map: Dict mapping board positions to actual moves
     """
-    mask = torch.full((N_BOARD + 2,), float("-inf"), dtype=dtype, device=device)
+    mask = torch.full((N_BOARD + 2,), float("-inf"), requires_grad=False, dtype=dtype, device=device)
     move_map = {}
 
     for start, end in moves:
@@ -111,9 +111,10 @@ def select_move(net, board, player, moves, *, device, temperature=1.0, training=
     if not moves:
         return None, 0.0, None
 
-    board = torch.from_numpy(board.astype(np.float32).flatten()).to(device).to(dtype)
 
     with torch.inference_mode():
+        board = torch.from_numpy(board.astype(np.float32).flatten()).to(device).to(dtype)
+
         net = net.to(device)
         policy_logits, value = net(board)
         policy_logits = policy_logits.squeeze(0)
@@ -292,7 +293,7 @@ def train_batch(net, optimizer, batch, *, device):
     move_probs_np = np.stack([exp["move_probs"] for exp in batch])
     target_probs = torch.from_numpy(move_probs_np).to(device).to(dtype)
 
-    rewards = torch.tensor([exp["reward"] for exp in batch], dtype=dtype, device=device)
+    rewards = torch.tensor([exp["reward"] for exp in batch], requires_grad=False, dtype=dtype, device=device)
 
     policy_logits, values = net(boards)
     values = values.squeeze()
