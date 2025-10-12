@@ -62,7 +62,7 @@ class UrNet(nn.Module):
             nn.Linear(hidden_size // 2, hidden_size // 4, dtype=dtype, device=device),
             nn.LeakyReLU(slope),
             nn.Linear(hidden_size // 4, 1, dtype=dtype, device=device),
-            nn.Tanh(),
+            # nn.Tanh(),
         )
 
     def forward(self, x):
@@ -270,11 +270,11 @@ def self_play_game(net, temperature, device):
         margin_reward = (exp_board[0, -1].item() - exp_board[1:, -1].max().item()) / N_PIECE
 
         # Combine: winner gets base + margin, loser gets base - margin
-        alpha = 0.7
-        reward = alpha * (discount_rate ** (len(experiences) - i)) * base_reward + (1.0 - alpha) * margin_reward
+        alpha = 1.0
+        reward = alpha * (discount_rate ** (len(experiences) - (i - 1))) * base_reward + (1.0 - alpha) * margin_reward
 
         # Clip to valid range
-        clip = 0.999
+        clip = 1.0
         reward = np.clip(reward, -clip, clip)
 
         training_data.append((exp_board, exp_probs, reward))
@@ -306,8 +306,8 @@ def train_batch(net, optimizer, batch, *, device):
     value_loss = ((values - rewards) ** 2).mean()
 
     # Total loss
-    alpha = 0.5
-    loss = alpha * policy_loss + (1 - alpha) * value_loss
+    alpha = 1.0
+    loss = alpha * policy_loss + (1.0 - alpha) * value_loss
 
     optimizer.zero_grad()
     loss.backward()
