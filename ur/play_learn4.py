@@ -44,7 +44,7 @@ def configure_logger(exp_dir):
 class UrNet(nn.Module):
     """Neural network for policy and value prediction."""
 
-    def __init__(self, input_size=(N_PLAYER * (N_BOARD + 2)), hidden_size=128, device=None):
+    def __init__(self, input_size=(N_PLAYER * (N_BOARD + 2)), hidden_size=128, device=None, return_value=False):
         super().__init__()
 
         self.shared = nn.ModuleList(
@@ -57,12 +57,14 @@ class UrNet(nn.Module):
 
         self.policy = nn.Linear(hidden_size // 2, N_BOARD + 2, dtype=dtype, device=device)
 
-        self.value = nn.ModuleList(
-            [
-                nn.Linear(hidden_size // 2, hidden_size // 4, dtype=dtype, device=device),
-            ]
-        )
-        self.value_final = nn.Linear(hidden_size // 4, 1, dtype=dtype, device=device)
+        self.return_value = return_value
+        if self.return_value:
+            self.value = nn.ModuleList(
+                [
+                    nn.Linear(hidden_size // 2, hidden_size // 4, dtype=dtype, device=device),
+                ]
+            )
+            self.value_final = nn.Linear(hidden_size // 4, 1, dtype=dtype, device=device)
 
     def forward(self, x):
         if self.training:
@@ -79,13 +81,14 @@ class UrNet(nn.Module):
 
         policy_logits = self.policy(x)
 
-        return policy_logits, None
+        value = None
 
-        for layer in self.value:
-            x = layer(x)
-            x = activation(x)
-        value = self.value_final(x)
-        value = torch.nn.functional.tanh(value)
+        if self.return_value:
+            for layer in self.value:
+                x = layer(x)
+                x = activation(x)
+            value = self.value_final(x)
+            value = torch.nn.functional.tanh(value)
 
         return policy_logits, value
 
