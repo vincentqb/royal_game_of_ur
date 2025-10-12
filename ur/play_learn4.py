@@ -419,11 +419,11 @@ def evaluate_models(policies, num_games=50):
 
     with pd.option_context("display.float_format", "{:.0f}".format):
         elos = compare_elo(results)
-        logger.info("\nELO Ratings:\n{elos}", elos=elos)
+        logger.info("ELO Ratings:\n{elos}", elos=elos)
 
     with pd.option_context("display.float_format", "{:.4f}".format):
         pairwise = compare_pairwise(results)
-        logger.info("\nPairwise Win Rates:\n{pairwise}", pairwise=pairwise)
+        logger.info("Pairwise Win Rates:\n{pairwise}", pairwise=pairwise)
 
     return elos, pairwise
 
