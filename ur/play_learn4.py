@@ -1,6 +1,6 @@
 import random
 import warnings
-from collections import deque
+from collections import deque, namedtuple
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
@@ -13,7 +13,6 @@ import torch.optim as optim
 from loguru import logger
 from play_one import (
     N_BOARD,
-    N_PIECE,
     N_PLAYER,
     create_board,
     determine_winner,
@@ -25,6 +24,7 @@ from play_one import (
 )
 from tqdm import tqdm, trange
 
+Experience = namedtuple("Experience", ["board", "player", "dice", "start", "end", "probs", "reward"])
 dtype = torch.float32
 
 
@@ -180,9 +180,9 @@ class ReplayBuffer:
     def __init__(self, maxlen=50_000):
         self.buffer = deque(maxlen=maxlen)
 
-    def append(self, board, move_probs, reward):
+    def append(self, experience):
         """Add experience to buffer."""
-        self.buffer.append({"board": board, "move_probs": move_probs, "reward": reward})
+        self.buffer.append(experience)
 
     def sample(self, batch_size):
         batch_size = min(batch_size, len(self.buffer))
@@ -206,7 +206,7 @@ def self_play_game(net, temperature, device):
     """
     board = create_board()
     player = 0
-    experiences = []
+    experiences = [[] for _ in range(N_PLAYER)]
     iteration = 0
     max_iterations = 1000
 
@@ -223,8 +223,24 @@ def self_play_game(net, temperature, device):
             )
 
             if move:
-                experiences.append((std_board.copy(), player, probs.cpu().numpy()))
+                experience = Experience(
+                    board=std_board.copy(),
+                    player=player,
+                    dice=dice,
+                    start=move[0],
+                    end=move[1],
+                    probs=probs.cpu().numpy(),
+                    reward=0.0,
+                )
+                experiences[player].append(experience)
                 execute_move(board, player, *move)
+
+                winner = determine_winner(board)
+                if winner:
+                    for p in range(N_PLAYER):
+                        for experience in experiences[p]:
+                            experience.reward = 1.0 if p == winner else -1.0
+                    break
 
                 if move[-1] not in [4, 8, 14]:
                     # Not a rosette
@@ -234,52 +250,9 @@ def self_play_game(net, temperature, device):
         else:
             player = (player + 1) % N_PLAYER
 
-        winner = determine_winner(board)
-        if winner:
-            break
-
         iteration += 1
+    return experiences
 
-    # Calculate rewards based on outcome
-    training_data = []
-
-    # Get final scores from the final board state, normalized to [-1, 1]
-    # Note: experiences store standardized boards, so get from actual game board
-    # final_score_margin = (board[0, -1].item() - board[1:, -1].max().item()) / N_PIECE
-
-    # discount_rate = 1.0
-    discount_rate = 0.999  # NOTE 0.999**1_000 ~= 0.37
-    for i, (exp_board, exp_player, exp_probs) in enumerate(experiences):
-        if winner:
-            # Base win/loss reward
-            if exp_player == winner[0]:
-                base_reward = +1.0
-            else:
-                base_reward = -1.0
-        else:
-            # Draw or timeout
-            base_reward = 0.0
-
-        # Margin bonus/penalty
-        # if exp_player == 0:
-        #     margin_reward = +final_score_margin
-        # else:
-        #     margin_reward = -final_score_margin
-
-        # Current score
-        margin_reward = (exp_board[0, -1].item() - exp_board[1:, -1].max().item()) / N_PIECE
-
-        # Combine: winner gets base + margin, loser gets base - margin
-        alpha = 1.0
-        reward = alpha * (discount_rate ** (len(experiences) - (i - 1))) * base_reward + (1.0 - alpha) * margin_reward
-
-        # Clip to valid range
-        clip = 1.0
-        reward = np.clip(reward, -clip, clip)
-
-        training_data.append((exp_board, exp_probs, reward))
-
-    return training_data
 
 
 def train_batch(net, optimizer, batch, *, device):
@@ -287,13 +260,13 @@ def train_batch(net, optimizer, batch, *, device):
     if not batch:
         return 0.0, 0.0, 0.0, 0.0
 
-    boards_np = np.stack([exp["board"].astype(np.float32) for exp in batch])
+    boards_np = np.stack([exp.board.astype(np.float32) for exp in batch])
     boards = torch.from_numpy(boards_np.reshape(len(batch), -1)).to(device).to(dtype)
 
-    move_probs_np = np.stack([exp["move_probs"] for exp in batch])
+    move_probs_np = np.stack([exp.probs for exp in batch])
     target_probs = torch.from_numpy(move_probs_np).to(device).to(dtype)
 
-    rewards = torch.tensor([exp["reward"] for exp in batch], requires_grad=False, dtype=dtype, device=device)
+    rewards = torch.tensor([exp.reward for exp in batch], requires_grad=False, dtype=dtype, device=device)
 
     policy_logits, values = net(boards)
     values = values.squeeze()
@@ -467,8 +440,9 @@ def train(
         temperature = max(0.5, 3.0 - 2.5 * iteration / num_iterations)
         tasks = [(net, temperature, device) for _ in range(batch_size)]
         for experiences in parallel_map(self_play_game, tasks):
-            for exp_board, exp_probs, reward in experiences:
-                buffer.append(exp_board, exp_probs, reward)
+            for p in range(N_PLAYER):
+                for experience in experiences[p]:
+                    buffer.append(experience)
 
         logger.trace("length of buffer: {length}", length=len(buffer))
 
