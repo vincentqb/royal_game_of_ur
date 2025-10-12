@@ -496,19 +496,9 @@ def train(
             neural_elo = elos[str(checkpoint_path)]
 
             # Update checkpoint with ELO metadata
-            is_best = neural_elo > best_elo
-            # checkpoint = torch.load(checkpoint_path, weights_only=False)
-            # checkpoint.update(
-            #     {
-            #         "elo": neural_elo,
-            #         "best_elo": neural_elo if is_best else best_elo,
-            #         "is_best": is_best,
-            #     }
-            # )
-            # torch.save(checkpoint, checkpoint_path)
 
             # Update best model symlink if this is the best
-            if is_best:
+            if neural_elo > best_elo:
                 best_elo = neural_elo
                 if best_model_path.exists() or best_model_path.is_symlink():
                     best_model_path.unlink()
