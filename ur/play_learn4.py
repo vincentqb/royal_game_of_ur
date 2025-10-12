@@ -46,29 +46,46 @@ class UrNet(nn.Module):
     def __init__(self, input_size=(N_PLAYER * (N_BOARD + 2)), hidden_size=128, device=None):
         super().__init__()
 
-        slope = 0.01
-        self.shared = nn.Sequential(
-            nn.Linear(input_size, hidden_size, dtype=dtype, device=device),
-            nn.LeakyReLU(slope),
-            nn.Linear(hidden_size, hidden_size, dtype=dtype, device=device),
-            nn.LeakyReLU(slope),
-            nn.Linear(hidden_size, hidden_size // 2, dtype=dtype, device=device),
-            nn.LeakyReLU(slope),
+        self.shared = nn.ModuleList(
+            [
+                nn.Linear(input_size, hidden_size, dtype=dtype, device=device),
+                nn.Linear(hidden_size, hidden_size, dtype=dtype, device=device),
+                nn.Linear(hidden_size, hidden_size // 2, dtype=dtype, device=device),
+            ]
         )
 
         self.policy = nn.Linear(hidden_size // 2, N_BOARD + 2, dtype=dtype, device=device)
 
-        self.value = nn.Sequential(
-            nn.Linear(hidden_size // 2, hidden_size // 4, dtype=dtype, device=device),
-            nn.LeakyReLU(slope),
-            nn.Linear(hidden_size // 4, 1, dtype=dtype, device=device),
-            # nn.Tanh(),
+        self.value = nn.ModuleList(
+            [
+                nn.Linear(hidden_size // 2, hidden_size // 4, dtype=dtype, device=device),
+            ]
         )
+        self.value_final = nn.Linear(hidden_size // 4, 1, dtype=dtype, device=device)
 
     def forward(self, x):
-        features = self.shared(x)
-        policy_logits = self.policy(features)
-        value = self.value(features)
+        if self.training:
+
+            def activation(x):
+                return torch.nn.functional.leaky_relu(x, negative_slope=0.01)
+
+        else:
+            activation = torch.nn.functional.relu
+
+        for layer in self.shared:
+            x = layer(x)
+            x = activation(x)
+
+        policy_logits = self.policy(x)
+
+        return policy_logits, None
+
+        for layer in self.value:
+            x = layer(x)
+            x = activation(x)
+        value = self.value_final(x)
+        value = torch.nn.functional.tanh(value)
+
         return policy_logits, value
 
 
