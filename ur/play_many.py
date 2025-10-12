@@ -30,11 +30,14 @@ def compare_play_wrapper(selected):
 
 
 def compare_elo(results):
+    """Calculate ELO ratings from game results."""
+
     INIT = 1000
     SCALING = 400
     LR = 30
 
     available = sorted(set(r[0] for r in results) | set(r[1] for r in results))
+    results = {name.stem if isinstance(name, Path) else name: result for name, result in results.item()}
     elos = {k: INIT for k in available}
 
     for result in results:
@@ -52,12 +55,15 @@ def compare_elo(results):
                 # Step due to Winning and Losing
                 elos[name_w] += LR * (1 - P_W)
                 elos[name_l] += LR * (0 - P_L)
+
     elos = pd.Series(elos, name="ELO").sort_values()
     return elos
 
 
 def compare_pairwise(results):
+    """Calculate pairwise win rates."""
     col_players = list(range(N_PLAYER))
+    results = {name.stem if isinstance(name, Path) else name: result for name, result in results.item()}
     results = [r for r in results if r["winner_id"] >= 0]
     results = pd.DataFrame(results, columns=col_players + ["winner_id", "winner_name"])
     results["pair_id"] = results[col_players].apply(lambda x: " ".join(sorted(x)), axis=1)
@@ -66,24 +72,24 @@ def compare_pairwise(results):
     return results
 
 
-def play_many():
-    available = ["policy_first", "policy_last", "policy_random", "policy_aggressive"]
-
+def play_many(policies):
     tasks = []
     for _ in range(100):
-        selected = random.choices(available, k=2)
+        selected = random.choices(policies, k=2)
         tasks.append([selected])
 
     results = list(parallel_map(compare_play_wrapper, tasks))
 
-    pd.set_option("display.float_format", "{:.0f}".format)
-    print(compare_elo(results))
+    with pd.option_context("display.float_format", "{:.0f}".format):
+        elos = compare_elo(results)
+        print(f"ELO Ratings:\n{elos}")
 
-    pd.set_option("display.float_format", "{:.4f}".format)
-    print(compare_pairwise(results))
+    with pd.option_context("display.float_format", "{:.4f}".format):
+        pairwise = compare_pairwise(results)
+        print(f"Pairwise Win Rates:\n{pairwise}")
 
     return results
 
 
 if __name__ == "__main__":
-    results = play_many()
+    results = play_many(["policy_first", "policy_last", "policy_random", "policy_aggressive"])

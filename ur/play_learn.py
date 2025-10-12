@@ -14,6 +14,8 @@ from loguru import logger
 from play_one import (
     N_BOARD,
     N_PLAYER,
+    compare_elo,
+    compare_pairwise,
     create_board,
     determine_winner,
     execute_move,
@@ -339,50 +341,6 @@ def compare_play_wrapper(selected):
         "winner_id": winner,
         "winner_name": selected[winner],
     }
-
-
-def compare_elo(results):
-    """Calculate ELO ratings from game results."""
-
-    INIT = 1000
-    SCALING = 400
-    LR = 30
-
-    available = sorted(set(r[0] for r in results) | set(r[1] for r in results))
-    results = {name.stem if isinstance(name, Path) else name: result for name, result in results.item()}
-    elos = {k: INIT for k in available}
-
-    for result in results:
-        if result["winner_id"] >= 0:
-            id_w = result["winner_id"]
-            id_l = 1 - id_w
-            name_w = result[id_w]
-            name_l = result[id_l]
-
-            if name_w != name_l:
-                delta = (elos[name_l] - elos[name_w]) / SCALING
-                P_W = 1 / (1 + 10 ** (+delta))
-                P_L = 1 / (1 + 10 ** (-delta))
-                elos[name_w] += LR * (1 - P_W)
-                elos[name_l] += LR * (0 - P_L)
-
-    elos = pd.Series(elos, name="ELO").sort_values()
-    return elos
-
-
-def compare_pairwise(results):
-    """Calculate pairwise win rates."""
-
-    col_players = list(range(N_PLAYER))
-
-    results = {name.stem if isinstance(name, Path) else name: result for name, result in results.item()}
-    results = [r for r in results if r["winner_id"] >= 0]
-    results = pd.DataFrame(results, columns=col_players + ["winner_id", "winner_name"])
-    results["pair_id"] = results[col_players].apply(lambda x: " ".join(sorted(x)), axis=1)
-    results = results[results[col_players].nunique(axis=1) > 1]
-    results = results.groupby("pair_id", as_index=False)["winner_name"].value_counts(normalize=True)
-
-    return results
 
 
 def evaluate_models(policies, num_games=50):
