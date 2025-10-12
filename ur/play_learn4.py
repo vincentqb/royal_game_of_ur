@@ -445,11 +445,16 @@ def train(
         temperature = max(0.5, 3.0 - 2.5 * iteration / num_iterations)
         tasks = [(net, temperature, device) for _ in range(batch_size)]
         for experiences in parallel_map(self_play_game, tasks):
+            logger.trace(
+                "length of experiences: {length}",
+                length=max(len(experience) for experience in experiences),
+                iteration=iteration,
+            )
             for p in range(N_PLAYER):
                 for experience in experiences[p]:
                     buffer.append(experience)
 
-        logger.trace("length of buffer: {length}", length=len(buffer))
+        logger.trace("length of buffer: {length}", length=len(buffer), iteration=iteration)
 
         if len(buffer) >= batch_size:
             net.train()
