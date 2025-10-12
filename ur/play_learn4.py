@@ -1,6 +1,6 @@
 import random
 import warnings
-from collections import deque, namedtuple
+from collections import deque
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
@@ -24,7 +24,6 @@ from play_one import (
 )
 from tqdm import tqdm, trange
 
-Experience = namedtuple("Experience", ["board", "player", "dice", "start", "end", "probs", "reward"])
 dtype = torch.float32
 
 
@@ -122,12 +121,10 @@ def select_move(net, board, player, moves, *, device, temperature=1.0, training=
 
     Returns:
         move: Selected (start, end) move
-        value: Estimated value of position
         probs: Action probabilities
     """
     if not moves:
-        return None, 0.0, None
-
+        return None, None
 
     with torch.inference_mode():
         board = torch.from_numpy(board.astype(np.float32).flatten()).to(device).to(dtype)
@@ -150,7 +147,7 @@ def select_move(net, board, player, moves, *, device, temperature=1.0, training=
         if move is None:
             move = random.choice(moves)
 
-        return move, value.item(), probs
+        return move, probs
 
 
 def load_model(model_path, device):
@@ -185,7 +182,7 @@ def create_policy_neural(model_path):
     net = load_model(model_path, device)
 
     def policy_neural(board, player, moves, **kwargs):
-        move, _, _ = select_move(net, board, player, moves, device=device, training=False)
+        move, _ = select_move(net, board, player, moves, device=device, training=False)
         return move
 
     return policy_neural
@@ -235,19 +232,18 @@ def self_play_game(net, temperature, device):
 
         if moves:
             std_board = standardize_state(board, player)
-            move, value, probs = select_move(
+            move, probs = select_move(
                 net, std_board, player, moves, device=device, temperature=temperature, training=True
             )
 
             if move:
-                experience = Experience(
+                experience = dict(
                     board=std_board.copy(),
                     player=player,
                     dice=dice,
                     start=move[0],
                     end=move[1],
                     probs=probs.cpu().numpy(),
-                    reward=0.0,
                 )
                 experiences[player].append(experience)
                 execute_move(board, player, *move)
@@ -256,7 +252,7 @@ def self_play_game(net, temperature, device):
                 if winner:
                     for p in range(N_PLAYER):
                         for experience in experiences[p]:
-                            experience.reward = 1.0 if p == winner else -1.0
+                            experience["reward"] = 1.0 if p == winner else -1.0
                     break
 
                 if move[-1] not in [4, 8, 14]:
@@ -271,40 +267,32 @@ def self_play_game(net, temperature, device):
     return experiences
 
 
-
 def train_batch(net, optimizer, batch, *, device):
     """Train on a batch of experiences."""
     if not batch:
         return 0.0, 0.0, 0.0, 0.0
 
-    boards_np = np.stack([exp.board.astype(np.float32) for exp in batch])
+    boards_np = np.stack([exp["board"].astype(np.float32) for exp in batch])
     boards = torch.from_numpy(boards_np.reshape(len(batch), -1)).to(device).to(dtype)
 
-    move_probs_np = np.stack([exp.probs for exp in batch])
-    target_probs = torch.from_numpy(move_probs_np).to(device).to(dtype)
+    rewards = torch.tensor([exp["reward"] for exp in batch], requires_grad=False, dtype=dtype, device=device)
 
-    rewards = torch.tensor([exp.reward for exp in batch], requires_grad=False, dtype=dtype, device=device)
-
-    policy_logits, values = net(boards)
-    values = values.squeeze()
+    policy_logits, value = net(boards)
 
     # Policy loss: KL divergence
     log_probs = torch.log_softmax(policy_logits, dim=1)
-    policy_loss = -(target_probs * log_probs).sum(dim=1).mean()
+    action_indices = torch.tensor([exp["start"] for exp in batch], requires_grad=False, dtype=torch.long, device=device)
 
-    # Value loss: MSE
-    value_loss = ((values - rewards) ** 2).mean()
-
-    # Total loss
-    alpha = 1.0
-    loss = alpha * policy_loss + (1.0 - alpha) * value_loss
+    rewards = torch.tensor([exp["reward"] for exp in batch], dtype=dtype, device=device)
+    selected_log_probs = log_probs[torch.arange(len(batch)), action_indices]
+    policy_loss = -(selected_log_probs * rewards).mean()
 
     optimizer.zero_grad()
-    loss.backward()
+    policy_loss.backward()
     torch.nn.utils.clip_grad_norm_(net.parameters(), 1.0)
     optimizer.step()
 
-    return loss.item(), policy_loss.item(), value_loss.item(), rewards.abs().mean().item()
+    return policy_loss.item(), rewards.abs().mean().item()
 
 
 def parallel_map(func, args, *, max_workers=16, use_threads=True):
@@ -468,28 +456,20 @@ def train(
 
             num_batches = min(num_batches, len(buffer) // batch_size)
             total_loss = 0.0
-            total_policy_loss = 0.0
-            total_value_loss = 0.0
             total_reward = 0.0
 
             for _ in range(num_batches):
                 batch = buffer.sample(batch_size)
-                loss, p_loss, v_loss, reward = train_batch(net, optimizer, batch, device=device)
+                loss, reward = train_batch(net, optimizer, batch, device=device)
                 total_loss += loss
-                total_policy_loss += p_loss
-                total_value_loss += v_loss
                 total_reward += reward
 
             avg_loss = total_loss / num_batches
-            avg_p_loss = total_policy_loss / num_batches
-            avg_v_loss = total_value_loss / num_batches
             avg_reward = total_reward / num_batches  # Mean absolute reward
 
             logger.info(
-                "Loss: {loss:.4f} - Policy: {p_loss:.4f} - Value: {v_loss:.4f} - Reward: {reward:.4f}",
+                "Loss: {loss:.4f} - Reward: {reward:.4f}",
                 loss=avg_loss,
-                p_loss=avg_p_loss,
-                v_loss=avg_v_loss,
                 reward=avg_reward,
                 iteration=iteration,
             )
