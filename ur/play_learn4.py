@@ -352,6 +352,9 @@ def compare_elo(results):
             name_w = result[id_w]
             name_l = result[id_l]
 
+            name_w = name_w.stem if isinstance(name_w, Path) else name_w
+            name_l = name_l.stem if isinstance(name_w, Path) else name_l
+
             if name_w != name_l:
                 delta = (elos[name_l] - elos[name_w]) / SCALING
                 P_W = 1 / (1 + 10 ** (+delta))
