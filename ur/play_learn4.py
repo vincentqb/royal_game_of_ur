@@ -28,6 +28,8 @@ dtype = torch.float32
 
 
 def configure_logger(exp_dir):
+    exp_dir.mkdir(parents=True, exist_ok=True)
+
     logger.remove()
     logger.add(exp_dir / "trace.log", level="TRACE", enqueue=True, serialize=True)
     logger.add(lambda msg: tqdm.write(msg, end=""), colorize=True, level="INFO")
@@ -130,7 +132,7 @@ def select_move(net, board, player, moves, *, device, temperature=1.0, training=
         board = torch.from_numpy(board.astype(np.float32).flatten()).to(device).to(dtype)
 
         net = net.to(device)
-        policy_logits, value = net(board)
+        policy_logits, _ = net(board)
         policy_logits = policy_logits.squeeze(0)
         probs = torch.softmax(policy_logits / temperature, dim=0)
 
@@ -277,7 +279,7 @@ def train_batch(net, optimizer, batch, *, device):
     boards = torch.from_numpy(boards.reshape(len(batch), -1)).to(device).to(dtype)
     rewards = torch.tensor([exp["reward"] for exp in batch], requires_grad=False, dtype=dtype, device=device)
 
-    policy_logits, value = net(boards)
+    policy_logits, _ = net(boards)
 
     # Policy loss: KL divergence
     log_probs = torch.log_softmax(policy_logits, dim=1)
@@ -291,7 +293,7 @@ def train_batch(net, optimizer, batch, *, device):
     torch.nn.utils.clip_grad_norm_(net.parameters(), 1.0)
     optimizer.step()
 
-    return policy_loss.item(), rewards.abs().mean().item()
+    return policy_loss.item()
 
 
 def parallel_map(func, args, *, max_workers=16, use_threads=True):
@@ -308,10 +310,10 @@ def parallel_map(func, args, *, max_workers=16, use_threads=True):
         ExecutorClass = ThreadPoolExecutor if use_threads else ProcessPoolExecutor
         with ExecutorClass(max_workers=max_workers) as executor:
             futures = [executor.submit(func, *arg) for arg in args]
-            for future in tqdm(as_completed(futures), total=len(futures), ncols=0):
+            for future in tqdm(as_completed(futures), total=len(futures), ncols=0, leave=False):
                 yield future.result()
     else:
-        for arg in tqdm(args, ncols=0):
+        for arg in tqdm(args, ncols=0, leave=False):
             yield func(*arg)
 
 
@@ -338,11 +340,13 @@ def compare_play_wrapper(selected):
 
 def compare_elo(results):
     """Calculate ELO ratings from game results."""
+
     INIT = 1000
     SCALING = 400
     LR = 30
 
     available = sorted(set(r[0] for r in results) | set(r[1] for r in results))
+    results = {name.stem if isinstance(name, Path) else name: result for name, result in results.item()}
     elos = {k: INIT for k in available}
 
     for result in results:
@@ -351,9 +355,6 @@ def compare_elo(results):
             id_l = 1 - id_w
             name_w = result[id_w]
             name_l = result[id_l]
-
-            name_w = name_w.stem if isinstance(name_w, Path) else name_w
-            name_l = name_l.stem if isinstance(name_w, Path) else name_l
 
             if name_w != name_l:
                 delta = (elos[name_l] - elos[name_w]) / SCALING
@@ -368,12 +369,16 @@ def compare_elo(results):
 
 def compare_pairwise(results):
     """Calculate pairwise win rates."""
+
     col_players = list(range(N_PLAYER))
+
+    results = {name.stem if isinstance(name, Path) else name: result for name, result in results.item()}
     results = [r for r in results if r["winner_id"] >= 0]
     results = pd.DataFrame(results, columns=col_players + ["winner_id", "winner_name"])
     results["pair_id"] = results[col_players].apply(lambda x: " ".join(sorted(x)), axis=1)
     results = results[results[col_players].nunique(axis=1) > 1]
     results = results.groupby("pair_id", as_index=False)["winner_name"].value_counts(normalize=True)
+
     return results
 
 
@@ -441,8 +446,9 @@ def train(
     best_elo = 0.0
     best_model_path = exp_dir / "best_model.pt"
 
-    for iteration in trange(num_iterations, ncols=0, desc="Epoch"):
-        net.eval()  # Set to eval mode for inference
+    pbar = trange(num_iterations, ncols=0, desc="Epoch")
+    for iteration in pbar:
+        net.eval()
 
         temperature = max(0.5, 3.0 - 2.5 * iteration / num_iterations)
         tasks = [(net, temperature, device) for _ in range(batch_size)]
@@ -458,28 +464,17 @@ def train(
 
         logger.trace("length of buffer: {length}", length=len(buffer), iteration=iteration)
 
-        if len(buffer) >= batch_size:
-            net.train()
+        net.train()
 
-            num_batches = min(num_batches, len(buffer) // batch_size)
-            total_loss = 0.0
-            total_reward = 0.0
+        loss = 0.0
+        num_batches_max = min(num_batches, len(buffer) // batch_size)
+        for _ in range(num_batches_max):
+            batch = buffer.sample(batch_size)
+            loss += train_batch(net, optimizer, batch, device=device)
 
-            for _ in range(num_batches):
-                batch = buffer.sample(batch_size)
-                loss, reward = train_batch(net, optimizer, batch, device=device)
-                total_loss += loss
-                total_reward += reward
-
-            avg_loss = total_loss / num_batches
-            avg_reward = total_reward / num_batches  # Mean absolute reward
-
-            logger.info(
-                "Loss: {loss:.4f} - Reward: {reward:.4f}",
-                loss=avg_loss,
-                reward=avg_reward,
-                iteration=iteration,
-            )
+        loss = loss / num_batches_max
+        logger.trace("Loss: {loss:.4f}", loss=loss, iteration=iteration)
+        pbar.set_postfix({"loss": f"{loss:.4f}"})
 
         # Save checkpoint and evaluate
         if (iteration + 1) % save_interval == 0:
@@ -495,13 +490,11 @@ def train(
             )
             logger.debug("Checkpoint saved to {path}", path=checkpoint_path)
 
-            # Now evaluate the saved model
-            elos, pairwise = evaluate_models([str(checkpoint_path), "policy_random", "policy_aggressive"])
-            neural_elo = elos[str(checkpoint_path)]
+            # Now evaluate saved model
+            elos, pairwise = evaluate_models([checkpoint_path, "policy_random", "policy_aggressive"])
+            neural_elo = elos[checkpoint_path]
 
-            # Update checkpoint with ELO metadata
-
-            # Update best model symlink if this is the best
+            # Update best model symlink if best
             if neural_elo > best_elo:
                 best_elo = neural_elo
                 if best_model_path.exists() or best_model_path.is_symlink():
@@ -516,6 +509,7 @@ def train(
 
 if __name__ == "__main__":
     # Create experiment directory
+
     experiment_id = datetime.now().strftime("%Y%m%d_%H%M%S")
     exp_dir = Path(f"experiments/{experiment_id}")
     exp_dir.mkdir(parents=True, exist_ok=True)
@@ -523,15 +517,17 @@ if __name__ == "__main__":
     configure_logger(exp_dir)
     logger.info("Experiment directory: {exp_dir}", exp_dir=exp_dir)
 
-    # Train the agent
+    # Train agent
+
     best_model_path = exp_dir / "best_model.pt"
+    checkpoint_model_path = None
     try:
         checkpoint_model_path = train(exp_dir=exp_dir)
     except KeyboardInterrupt:
         logger.warning("Training interupted by user")
-        checkpoint_model_path = None
 
     # Final evaluation
+
     available = [
         "policy_random",
         "policy_aggressive",
@@ -539,7 +535,8 @@ if __name__ == "__main__":
         "policy_last",
     ]
     if best_model_path.exists():
-        available.append(str(best_model_path))
+        available.append(best_model_path)
     if checkpoint_model_path is not None and checkpoint_model_path.exists():
-        available.append(str(checkpoint_model_path))
+        available.append(checkpoint_model_path)
+
     evaluate_models(available, num_games=200)
