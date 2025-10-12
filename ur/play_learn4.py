@@ -250,9 +250,10 @@ def self_play_game(net, temperature, device):
 
                 winner = determine_winner(board)
                 if winner:
+                    assert len(winner) == 1
                     for p in range(N_PLAYER):
                         for experience in experiences[p]:
-                            experience["reward"] = 1.0 if p == winner else -1.0
+                            experience["reward"] = 1.0 if p == winner[0] else -1.0
                     break
 
                 if move[-1] not in [4, 8, 14]:
@@ -272,9 +273,8 @@ def train_batch(net, optimizer, batch, *, device):
     if not batch:
         return 0.0, 0.0, 0.0, 0.0
 
-    boards_np = np.stack([exp["board"].astype(np.float32) for exp in batch])
-    boards = torch.from_numpy(boards_np.reshape(len(batch), -1)).to(device).to(dtype)
-
+    boards = np.stack([exp["board"].astype(np.float32) for exp in batch])
+    boards = torch.from_numpy(boards.reshape(len(batch), -1)).to(device).to(dtype)
     rewards = torch.tensor([exp["reward"] for exp in batch], requires_grad=False, dtype=dtype, device=device)
 
     policy_logits, value = net(boards)
@@ -283,7 +283,6 @@ def train_batch(net, optimizer, batch, *, device):
     log_probs = torch.log_softmax(policy_logits, dim=1)
     action_indices = torch.tensor([exp["start"] for exp in batch], requires_grad=False, dtype=torch.long, device=device)
 
-    rewards = torch.tensor([exp["reward"] for exp in batch], dtype=dtype, device=device)
     selected_log_probs = log_probs[torch.arange(len(batch)), action_indices]
     policy_loss = -(selected_log_probs * rewards).mean()
 
