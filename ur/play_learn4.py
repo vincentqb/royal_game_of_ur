@@ -118,16 +118,16 @@ def select_move(net, board, player, moves, *, device, temperature=1.0, training=
         net = net.to(device)
         policy_logits, value = net(board)
         policy_logits = policy_logits.squeeze(0)
+        probs = torch.softmax(policy_logits / temperature, dim=0)
 
         mask, move_map = get_move_mask(moves, device=device)
         masked_logits = policy_logits + mask
-
-        probs = torch.softmax(masked_logits / temperature, dim=0)
+        masked_probs = torch.softmax(masked_logits / temperature, dim=0)
 
         if training:
-            action_idx = torch.multinomial(probs, 1).item()
+            action_idx = torch.multinomial(masked_probs, 1).item()
         else:
-            action_idx = torch.argmax(probs).item()
+            action_idx = torch.argmax(masked_probs).item()
 
         move = move_map.get(action_idx)
         if move is None:
