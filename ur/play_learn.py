@@ -11,11 +11,13 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from loguru import logger
+from play_many import (
+    compare_elo,
+    compare_pairwise,
+)
 from play_one import (
     N_BOARD,
     N_PLAYER,
-    compare_elo,
-    compare_pairwise,
     create_board,
     determine_winner,
     execute_move,
@@ -328,10 +330,10 @@ def compare_play_wrapper(selected):
 
     policies = []
     for s in selected:
-        if hasattr(play_one, s):
+        if hasattr(play_one, str(s)):
             policies.append(getattr(play_one, s))
         else:
-            # Assume it's a path to a model
+            # path to model
             policies.append(create_policy_neural(s))
 
     states = play(policies)

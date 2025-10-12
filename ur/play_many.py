@@ -1,5 +1,6 @@
 import random
 from concurrent.futures import ProcessPoolExecutor, as_completed
+from pathlib import Path
 
 import pandas as pd
 import play_one
@@ -36,7 +37,7 @@ def compare_elo(results):
     SCALING = 400
     LR = 30
 
-    available = sorted(set(r[0] for r in results) | set(r[1] for r in results))
+    available = sorted(set(str(r[0]) for r in results) | set(str(r[1]) for r in results))
     results = {name.stem if isinstance(name, Path) else name: result for name, result in results.item()}
     elos = {k: INIT for k in available}
 
