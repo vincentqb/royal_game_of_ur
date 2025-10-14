@@ -73,7 +73,19 @@ def compare_pairwise(results):
     return results
 
 
-def play_many(policies):
+def play_many(policies, num_games=50):
+    """
+    Evaluate multiple models against baseline policies using ELO.
+
+    Args:
+        model_paths: List of policy names from play_one (e.g., ['policy_random'])
+        num_games: Number of games to play
+
+    Returns:
+        elos: Series of ELO ratings
+        pairwise: DataFrame of pairwise win rates
+    """
+
     tasks = []
     for _ in range(100):
         selected = random.choices(policies, k=2)
@@ -89,8 +101,8 @@ def play_many(policies):
         pairwise = compare_pairwise(results)
         print(f"Pairwise Win Rates:\n{pairwise}")
 
-    return results
+    return elos, pairwise
 
 
 if __name__ == "__main__":
-    results = play_many(["policy_first", "policy_last", "policy_random", "policy_aggressive"])
+    play_many(["policy_first", "policy_last", "policy_random", "policy_aggressive"])

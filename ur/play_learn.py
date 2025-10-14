@@ -15,6 +15,7 @@ from play_many import (
     compare_elo,
     compare_pairwise,
 )
+from play_many import play_many as evaluate_models
 from play_one import (
     N_BOARD,
     N_PLAYER,
@@ -343,38 +344,6 @@ def compare_play_wrapper(selected):
         "winner_id": winner,
         "winner_name": selected[winner],
     }
-
-
-def evaluate_models(policies, num_games=50):
-    """
-    Evaluate multiple models against baseline policies using ELO.
-
-    Args:
-        model_paths: List of paths to model checkpoints or dict {name: path}
-        baseline_policies: List of policy names from play_one (e.g., ['policy_random'])
-        num_games: Number of games to play
-
-    Returns:
-        elos: Series of ELO ratings
-        pairwise: DataFrame of pairwise win rates
-    """
-
-    tasks = []
-    for _ in range(num_games):
-        selected = random.choices(policies, k=2)
-        tasks.append([selected])
-
-    results = list(parallel_map(compare_play_wrapper, tasks))
-
-    with pd.option_context("display.float_format", "{:.0f}".format):
-        elos = compare_elo(results)
-        logger.info("ELO Ratings:\n{elos}", elos=elos)
-
-    with pd.option_context("display.float_format", "{:.4f}".format):
-        pairwise = compare_pairwise(results)
-        logger.info("Pairwise Win Rates:\n{pairwise}", pairwise=pairwise)
-
-    return elos, pairwise
 
 
 def train(
