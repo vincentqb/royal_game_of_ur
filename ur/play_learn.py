@@ -155,8 +155,8 @@ def train(
     *,
     exp_dir,
     batch_size=25,
-    num_batches=500,
     num_iterations=500,
+    num_epochs=1_000,
     save_interval=25,
 ):
     """
@@ -165,8 +165,8 @@ def train(
     Args:
         exp_dir: Path to experiment directory
         batch_size: Number of self-play games per iteration
-        num_batches: Number of training batches per iteration
-        num_iterations: Number of training iterations
+        num_iterations: Number of training batches per iteration
+        num_epochs: Number of training iterations
         save_interval: Save and evaluate model every N iterations
 
     Returns:
@@ -174,7 +174,14 @@ def train(
     """
     # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     device = torch.device("cpu")
-    logger.trace("Using device: {device}", device=device)
+    logger.trace(
+        "Doing {num_epochs} epochs of {num_iterations} iterations of size {batch_size} on {device}",
+        num_epochs=num_epochs,
+        num_iterations=num_iterations,
+        batch_size=batch_size,
+        save_interval=save_interval,
+        device=device,
+    )
 
     net = UrNet(device=device)
     optimizer = optim.Adam(net.parameters(), lr=0.001)
@@ -183,11 +190,11 @@ def train(
     best_elo = 0.0
     best_model_path = exp_dir / "best_model.pt"
 
-    pbar = trange(num_iterations, ncols=0, desc="Epoch")
+    pbar = trange(num_epochs, ncols=0, desc="Epoch")
     for iteration in pbar:
         net.eval()
 
-        temperature = max(0.5, 3.0 - 2.5 * iteration / num_iterations)
+        temperature = max(0.5, 3.0 - 2.5 * iteration / num_epochs)
         tasks = [(net, temperature, device) for _ in range(batch_size)]
         for experiences in parallel_map(self_play_game, tasks):
             logger.trace(
@@ -204,12 +211,11 @@ def train(
         net.train()
 
         loss = 0.0
-        num_batches_max = min(num_batches, len(buffer) // batch_size)
-        for _ in range(num_batches_max):
+        for _ in range(num_iterations):
             batch = buffer.sample(batch_size)
             loss += train_batch(net, optimizer, batch, device=device)
 
-        loss = loss / num_batches_max
+        loss = loss / num_iterations
         logger.trace("Loss: {loss:.4f}", loss=loss, iteration=iteration)
         pbar.set_postfix({"loss": f"{loss:.4f}"})
 
@@ -237,9 +243,9 @@ def train(
                 if best_model_path.exists() or best_model_path.is_symlink():
                     best_model_path.unlink()
                 best_model_path.symlink_to(checkpoint_path.name)
-                logger.success("New best model with ELO: {elo:.0f}", elo=neural_elo)
+                logger.success("New Best ELO: {elo:.0f}", elo=neural_elo)
 
-    logger.success("Best ELO: {elo:.0f}", elo=best_elo)
+    logger.success("Observed Best ELO: {elo:.0f}", elo=best_elo)
 
     return checkpoint_path
 
