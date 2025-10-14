@@ -17,8 +17,12 @@ def policy_human(*, board, player, moves, visual, **_):
         key = visual.screen.getch()
         if key == ord("q"):
             return -1
-        elif key == 9:  # Tab key to cycle through pieces with legal moves
+        elif key == ord("\t"):
+            # Tab to cycle
             move_index = (move_index + 1) % len(moves)
+        elif key == curses.KEY_BTAB:
+            # Shift+Tab to cycle backward
+            move_index = (move_index - 1) % len(moves)
         elif key == curses.KEY_LEFT:
             move_index = (move_index - 1) % len(moves)
         elif key == curses.KEY_RIGHT:

@@ -5,7 +5,7 @@ N_PIECE = 7
 N_BOARD = 14
 SAFE = sorted([8])
 ROSETTE = sorted([4, 8, 14])
-COMMON = sorted(range(5, 13))
+COMMON = sorted(range(5, 12 + 1))
 
 
 def create_board():
