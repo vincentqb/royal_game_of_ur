@@ -266,7 +266,7 @@ def self_play_game(net, temperature, device):
                             experience["reward"] = 1.0 if p == winner[0] else -1.0
                     break
 
-                if move[-1] not in [4, 8, 14]:
+                if move[-1] not in ROSETTE:
                     # Not a rosette
                     player = (player + 1) % N_PLAYER
             else:
