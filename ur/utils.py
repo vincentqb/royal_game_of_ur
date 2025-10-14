@@ -1,8 +1,8 @@
 import warnings
 
 import torch
-import tqdm
 from loguru import logger
+from tqdm import tqdm
 
 dtype = torch.float32
 
