@@ -1,23 +1,10 @@
 import random
-from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 
 import pandas as pd
 from game import N_PLAYER
 from play_one import play
-from tqdm import tqdm
-
-
-def parallel_map(func, args, max_workers=None):
-    """Applies func to items in args (list of tuples), preserving order."""
-    if max_workers is None or max_workers >= 0:
-        with ProcessPoolExecutor(max_workers=max_workers) as executor:
-            futures = [executor.submit(func, *arg) for arg in args]
-            for future in tqdm(as_completed(futures), total=len(futures), ncols=0):
-                yield future.result()
-    else:
-        for arg in tqdm(args, ncols=0):
-            yield func(*arg)
+from utils import parallel_map
 
 
 def compare_play_wrapper(selected):
