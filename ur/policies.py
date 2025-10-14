@@ -11,7 +11,7 @@ from utils import dtype
 def policy_human(*, board, player, moves, visual, **_):
     move_index = 0
     while True:
-        visual.show_pieces(board, moves[move_index][0], player)
+        visual.show_pieces(board, current_piece=moves[move_index][0], current_player=player)
 
         # Get user input
         key = visual.screen.getch()

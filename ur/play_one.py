@@ -89,15 +89,27 @@ class VisualBoard:
         # self.screen.addstr(self.start_y - 1, self.start_x, msg)
         self.screen.clrtoeol()
 
-    def show_pieces(self, board, current_piece, current_player):
+    def show_pieces(self, board, *, current_piece=None, current_player=None):
         if self.screen is None:
             return
         for player in range(N_PLAYER):
-            pieces = np.nonzero(board[player, :])[-1].tolist()
+            for i in [0, len(board[0]) - 1]:
+                y, x = self.map(i, player)
+                style = curses.A_BOLD
+                label = str(int(board[player][i].item()))
+                self.screen.addstr(y + 1, x + 2, label, style)
+
+            pieces = np.nonzero(board[player, :-1])[-1].tolist()
             for i in range(len(pieces)):
                 y, x = self.map(pieces[i], player)
-                style = curses.A_REVERSE if player == current_player and pieces[i] == current_piece else curses.A_BOLD
-                label = str(player) if 0 < i < N_BOARD else str(int(board[player][i].item()))
+                if player == current_player and pieces[i] == current_piece:
+                    style = curses.A_REVERSE
+                else:
+                    style = curses.A_BOLD
+                if 0 < i < N_BOARD - 1:
+                    label = str(player)
+                else:
+                    label = str(int(board[player][i].item()))
                 self.screen.addstr(y + 1, x + 2, label, style)
         self.screen.refresh()
 
@@ -118,6 +130,7 @@ def play(policies, board=None, screen=None):
 
     while True:
         visual.show_board()
+        visual.show_pieces(board)
 
         dice = throw()
         moves = get_legal_moves(board, player, dice)
