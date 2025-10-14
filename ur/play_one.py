@@ -1,66 +1,20 @@
 import curses
-import random
 from time import sleep
 
 import numpy as np
-
-N_PLAYER = 2
-N_PIECE = 7
-N_BOARD = 14
-SAFE = sorted([8])
-ROSETTE = sorted([4, 8, 14])
-COMMON = sorted(range(5, 13))
-
-
-def create_board():
-    # pieces start on [0] and end on [-1]
-    board = np.zeros((N_PLAYER, N_BOARD + 2), dtype=np.uint8)
-    board[:, 0] = N_PIECE
-    return board
-
-
-def throw():
-    return np.random.randint(0, 2, size=4, dtype=np.uint8).sum().item()
-
-
-def get_legal_moves(board, player, dice):
-    if dice == 0:
-        return []
-
-    enemies = [p for p in range(N_PLAYER) if p != player]
-    inds = np.nonzero(board[player, :-1])[-1].tolist()
-
-    moves = []
-    for start in inds:
-        end = start + dice
-        if start > max(COMMON) and end > N_BOARD + 1:
-            # Player needs exact throw for last two squares
-            continue
-        end = min(end, N_BOARD + 1)
-        if end < N_BOARD + 1 and board[[player], end].sum() > 0:
-            # Player has a piece there
-            continue
-        if end in SAFE and board[enemies, end].sum() > 0:
-            # Ennemy on safe rosette
-            continue
-        moves.append((start, end))
-
-    return moves
-
-
-def determine_winner(board):
-    # Empty if no winners
-    return np.nonzero(board[:, -1] == N_PIECE)[0].tolist()
-
-
-def execute_move(board, player, start, end):
-    enemies = [p for p in range(N_PLAYER) if p != player]
-    if end in COMMON and board[enemies, end].sum() > 0:
-        enemy = np.nonzero(board[:, end])[0].item()
-        board[enemy, end] -= 1
-        board[enemy, 0] += 1
-    board[player, start] -= 1
-    board[player, end] += 1
+from game import (
+    COMMON,
+    N_BOARD,
+    N_PLAYER,
+    ROSETTE,
+    create_board,
+    determine_winner,
+    execute_move,
+    get_legal_moves,
+    standardize_state,
+    throw,
+)
+from policies import policy_human
 
 
 class VisualBoard:
@@ -146,55 +100,6 @@ class VisualBoard:
                 label = str(player) if 0 < i < N_BOARD else str(int(board[player][i].item()))
                 self.screen.addstr(y + 1, x + 2, label, style)
         self.screen.refresh()
-
-
-def policy_human(*, board, player, moves, visual, **_):
-    move_index = 0
-    while True:
-        visual.show_pieces(board, moves[move_index][0], player)
-
-        # Get user input
-        key = visual.screen.getch()
-        if key == ord("q"):
-            return -1
-        elif key == 9:  # Tab key to cycle through pieces with legal moves
-            move_index = (move_index + 1) % len(moves)
-        elif key == curses.KEY_LEFT:
-            move_index = (move_index - 1) % len(moves)
-        elif key == curses.KEY_RIGHT:
-            move_index = (move_index + 1) % len(moves)
-        elif key == 10:  # Enter key to confirm move
-            return moves[int(move_index)]
-
-
-def policy_first(*, moves, **_):
-    return moves[0]
-
-
-def policy_last(*, moves, **_):
-    return moves[-1]
-
-
-def policy_random(*, moves, **_):
-    return random.choice(moves)
-
-
-def policy_aggressive(*, board, player, moves, **_):
-    enemies = [p for p in range(N_PLAYER) if p != player]
-    for move in moves[::-1]:
-        if move[-1] in COMMON and board[enemies, move[-1]].sum() > 0:
-            return move
-        if move[-1] in ROSETTE:
-            return move
-    return move
-
-
-def standardize_state(board, player):
-    # return board
-    # return np.concat([np.array([player], dtype=np.uint8), board.flatten()], dtype=np.uint8)
-    rows = list(range(N_PLAYER))
-    rows = rows[player:] + rows[:player]  # rotate
-    return board[rows, :]
 
 
 def play(policies, board=None, screen=None):

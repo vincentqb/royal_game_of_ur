@@ -3,8 +3,8 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 
 import pandas as pd
-import play_one
-from play_one import N_PLAYER, play
+from game import N_PLAYER
+from play_one import play
 from tqdm import tqdm
 
 
@@ -21,7 +21,21 @@ def parallel_map(func, args, max_workers=None):
 
 
 def compare_play_wrapper(selected):
-    states = play([getattr(play_one, s) for s in selected])
+    """Play a game between two policies and return result."""
+
+    policies_to_compare = []
+    for s in selected:
+        import policies
+
+        if hasattr(policies, str(s)):
+            policies_to_compare.append(getattr(policies, s))
+        else:
+            # path to model
+            from policies import create_policy_neural
+
+            policies_to_compare.append(create_policy_neural(s))
+
+    states = play(policies_to_compare)
     winner = states["winner"]
     return {
         **{k: v for k, v in enumerate(selected)},
@@ -78,7 +92,7 @@ def play_many(policies, num_games=50):
     Evaluate multiple models against baseline policies using ELO.
 
     Args:
-        model_paths: List of policy names from play_one (e.g., ['policy_random'])
+        model_paths: List of policy names from policies (e.g., ['policy_random'])
         num_games: Number of games to play
 
     Returns:
@@ -105,4 +119,12 @@ def play_many(policies, num_games=50):
 
 
 if __name__ == "__main__":
-    play_many(["policy_first", "policy_last", "policy_random", "policy_aggressive"])
+    play_many(
+        [
+            "policy_first",
+            "policy_last",
+            "policy_random",
+            "policy_aggressive",
+            "experiments/20251012_141628/checkpoint_00500.pt",
+        ]
+    )

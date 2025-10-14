@@ -1,201 +1,27 @@
 import random
-import warnings
 from collections import deque
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
 
 import numpy as np
-import pandas as pd
 import torch
-import torch.nn as nn
 import torch.optim as optim
-from loguru import logger
-from play_many import (
-    compare_elo,
-    compare_pairwise,
-)
-from play_many import play_many as evaluate_models
-from play_one import (
-    N_BOARD,
+from game import (
     N_PLAYER,
+    ROSETTE,
     create_board,
     determine_winner,
     execute_move,
     get_legal_moves,
-    play,
     standardize_state,
     throw,
 )
+from loguru import logger
+from play_many import play_many as evaluate_models
+from policies import UrNet, select_move
 from tqdm import tqdm, trange
-
-dtype = torch.float32
-
-
-def configure_logger(exp_dir):
-    exp_dir.mkdir(parents=True, exist_ok=True)
-
-    logger.remove()
-    logger.add(exp_dir / "trace.log", level="TRACE", enqueue=True, serialize=True)
-    logger.add(lambda msg: tqdm.write(msg, end=""), colorize=True, level="INFO")
-
-    def showwarning_to_loguru(message, category, filename, lineno, file=None, line=None):
-        formatted_message = warnings.formatwarning(message, category, filename, lineno, line)
-        logger.warning(formatted_message)
-
-    warnings.showwarning = showwarning_to_loguru
-
-
-class UrNet(nn.Module):
-    """Neural network for policy and value prediction."""
-
-    def __init__(self, input_size=(N_PLAYER * (N_BOARD + 2)), hidden_size=128, device=None, return_value=False):
-        super().__init__()
-
-        self.shared = nn.ModuleList(
-            [
-                nn.Linear(input_size, hidden_size, dtype=dtype, device=device),
-                nn.Linear(hidden_size, hidden_size, dtype=dtype, device=device),
-                nn.Linear(hidden_size, hidden_size // 2, dtype=dtype, device=device),
-            ]
-        )
-
-        self.policy = nn.Linear(hidden_size // 2, N_BOARD + 2, dtype=dtype, device=device)
-
-        self.return_value = return_value
-        if self.return_value:
-            self.value = nn.ModuleList(
-                [
-                    nn.Linear(hidden_size // 2, hidden_size // 4, dtype=dtype, device=device),
-                ]
-            )
-            self.value_final = nn.Linear(hidden_size // 4, 1, dtype=dtype, device=device)
-
-    def forward(self, x):
-        if self.training:
-
-            def activation(x):
-                return torch.nn.functional.leaky_relu(x, negative_slope=0.01)
-
-        else:
-            activation = torch.nn.functional.relu
-
-        for layer in self.shared:
-            x = layer(x)
-            x = activation(x)
-
-        policy_logits = self.policy(x)
-
-        value = None
-
-        if self.return_value:
-            for layer in self.value:
-                x = layer(x)
-                x = activation(x)
-            value = self.value_final(x)
-            value = torch.nn.functional.tanh(value)
-
-        return policy_logits, value
-
-
-def get_move_mask(moves, *, device):
-    """
-    Create mask for legal moves.
-
-    Returns:
-        mask: Tensor with 0 for legal starting positions, -inf for illegal
-        move_map: Dict mapping board positions to actual moves
-    """
-    mask = torch.full((N_BOARD + 2,), float("-inf"), requires_grad=False, dtype=dtype, device=device)
-    move_map = {}
-
-    for start, end in moves:
-        mask[start] = 0.0
-        move_map[start] = (start, end)
-
-    return mask, move_map
-
-
-def select_move(net, board, player, moves, *, device, temperature=1.0, training=True):
-    """
-    Select move using policy network with dice-based masking.
-
-    Args:
-        net: Neural network
-        board: Current board state (numpy array)
-        player: Current player
-        moves: List of legal (start, end) moves
-        device: torch device
-        temperature: Exploration parameter
-        training: If True, sample; if False, take argmax
-
-    Returns:
-        move: Selected (start, end) move
-        probs: Action probabilities
-    """
-    if not moves:
-        return None, None
-
-    with torch.inference_mode():
-        board = torch.from_numpy(board.astype(np.float32).flatten()).to(device).to(dtype)
-
-        net = net.to(device)
-        policy_logits, _ = net(board)
-        policy_logits = policy_logits.squeeze(0)
-        probs = torch.softmax(policy_logits / temperature, dim=0)
-
-        mask, move_map = get_move_mask(moves, device=device)
-        masked_logits = policy_logits + mask
-        masked_probs = torch.softmax(masked_logits / temperature, dim=0)
-
-        if training:
-            action_idx = torch.multinomial(masked_probs, 1).item()
-        else:
-            action_idx = torch.argmax(masked_probs).item()
-
-        move = move_map.get(action_idx)
-        if move is None:
-            move = random.choice(moves)
-
-        return move, probs
-
-
-def load_model(model_path, device):
-    """Load model from checkpoint."""
-    net = UrNet(device=device)
-    checkpoint = torch.load(model_path, map_location=device, weights_only=True)
-
-    if isinstance(checkpoint, dict) and "model_state_dict" in checkpoint:
-        net.load_state_dict(checkpoint["model_state_dict"])
-    else:
-        net.load_state_dict(checkpoint)
-
-    net.eval()
-    return net
-
-
-def create_policy_neural(model_path):
-    """
-    Create a policy_neural function for a specific model.
-
-    This creates a policy function that can be used with play_one.play()
-    and can be pickled for multiprocessing.
-
-    Args:
-        model_path: Path to saved model checkpoint
-
-    Returns:
-        Policy function compatible with play_one interface
-    """
-    # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    device = torch.device("cpu")
-    net = load_model(model_path, device)
-
-    def policy_neural(board, player, moves, **kwargs):
-        move, _ = select_move(net, board, player, moves, device=device, training=False)
-        return move
-
-    return policy_neural
+from utils import configure_logger, dtype
 
 
 class ReplayBuffer:
@@ -323,27 +149,6 @@ def parallel_map(func, args, *, max_workers=16, use_threads=True):
     else:
         for arg in tqdm(args, ncols=0, leave=False):
             yield func(*arg)
-
-
-def compare_play_wrapper(selected):
-    """Play a game between two policies and return result."""
-    import play_one
-
-    policies = []
-    for s in selected:
-        if hasattr(play_one, str(s)):
-            policies.append(getattr(play_one, s))
-        else:
-            # path to model
-            policies.append(create_policy_neural(s))
-
-    states = play(policies)
-    winner = states["winner"]
-    return {
-        **{k: v for k, v in enumerate(selected)},
-        "winner_id": winner,
-        "winner_name": selected[winner],
-    }
 
 
 def train(
