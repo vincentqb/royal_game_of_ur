@@ -15,13 +15,14 @@ def compare_play_wrapper(selected):
         import policies
 
         if hasattr(policies, str(s)):
-            policies_to_compare.append(getattr(policies, s))
+            policies_to_compare.append(getattr(policies, str(s)))
         else:
             # path to model
             from policies import create_policy_neural
 
             policies_to_compare.append(create_policy_neural(s))
 
+    selected = [name.stem if isinstance(name, Path) else name for name in selected]
     states = play(policies_to_compare)
     winner = states["winner"]
     return {
@@ -39,7 +40,6 @@ def compare_elo(results):
     LR = 30
 
     available = sorted(set(str(r[0]) for r in results) | set(str(r[1]) for r in results))
-    results = {name.stem if isinstance(name, Path) else name: result for name, result in results.item()}
     elos = {k: INIT for k in available}
 
     for result in results:
@@ -65,7 +65,6 @@ def compare_elo(results):
 def compare_pairwise(results):
     """Calculate pairwise win rates."""
     col_players = list(range(N_PLAYER))
-    results = {name.stem if isinstance(name, Path) else name: result for name, result in results.item()}
     results = [r for r in results if r["winner_id"] >= 0]
     results = pd.DataFrame(results, columns=col_players + ["winner_id", "winner_name"])
     results["pair_id"] = results[col_players].apply(lambda x: " ".join(sorted(x)), axis=1)
@@ -112,6 +111,6 @@ if __name__ == "__main__":
             "policy_last",
             "policy_random",
             "policy_aggressive",
-            "experiments/20251012_141628/checkpoint_00500.pt",
+            Path("experiments/20251012_141628/checkpoint_00500.pt"),
         ]
     )

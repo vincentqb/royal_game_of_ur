@@ -213,7 +213,7 @@ def train(
 
             # Now evaluate saved model
             elos, pairwise = evaluate_models([checkpoint_path, "policy_random", "policy_aggressive"])
-            neural_elo = elos[checkpoint_path]
+            neural_elo = elos[checkpoint_path.stem]
 
             # Update best model symlink if best
             if neural_elo > best_elo:
