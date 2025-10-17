@@ -29,9 +29,9 @@ class ReplayBuffer:
     def __init__(self, maxlen=50_000):
         self.buffer = deque(maxlen=maxlen)
 
-    def append(self, experience):
+    def extend(self, experience):
         """Add experience to buffer."""
-        self.buffer.append(experience)
+        self.buffer.extend(experience)
 
     def sample(self, batch_size):
         batch_size = min(batch_size, len(self.buffer))
@@ -55,7 +55,7 @@ def self_play_game(net, temperature, device):
     """
     board = create_board()
     player = 0
-    experiences = [[] for _ in range(N_PLAYER)]
+    experiences = []
     iteration = 0
     max_iterations = 1000
 
@@ -80,16 +80,14 @@ def self_play_game(net, temperature, device):
                     end=move[1],
                     probs=probs.cpu().numpy(),
                 )
-                experiences[player].append(experience)
+                experiences.append(experience)
                 execute_move(board, player, *move)
 
                 winner = determine_winner(board)
                 if winner:
                     assert len(winner) == 1
-                    for p in range(N_PLAYER):
-                        for experience in experiences[p]:
-                            experience["reward"] = 1.0 if p == winner[0] else -1.0
-                    break
+                    for experience in experiences:
+                        experience["reward"] = 1.0 if experience["player"] == winner[0] else -1.0
 
                 if move[-1] not in ROSETTE:
                     # Not a rosette
@@ -180,9 +178,7 @@ def train(
                 length=max(len(experience) for experience in experiences),
                 iteration=iteration,
             )
-            for p in range(N_PLAYER):
-                for experience in experiences[p]:
-                    buffer.append(experience)
+            buffer.extend(experiences)
 
         logger.trace("length of buffer: {length}", length=len(buffer), iteration=iteration)
 
