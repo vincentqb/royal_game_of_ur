@@ -60,7 +60,7 @@ def get_legal_moves(board, player, dice):
 
 def determine_winner(board):
     # Empty if no winners
-    return np.nonzero(board[:, -1] == N_PIECE)[0].tolist()
+    return np.nonzero(board[:, -1] >= N_PIECE)[0].tolist()
 
 
 def throw():

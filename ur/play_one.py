@@ -122,11 +122,7 @@ def play(policies, board=None, screen=None):
     winner = []
     iteration = 0
 
-    states = {
-        "winner": -1,
-        "boards": [standardize_state(board, player)],
-        "players": [player],
-    }
+    experiences = []
 
     while True:
         visual.show_board()
@@ -142,28 +138,35 @@ def play(policies, board=None, screen=None):
             if move == -1:
                 visual.show_info("Players quit.")
                 break
+            experience = dict(
+                board=standardize_state(board, player).copy(),
+                player=player,
+                dice=dice,
+                start=move[0],
+                end=move[1],
+            )
+            experiences.append(experience)
             execute_move(board, player, *move)
-            states["boards"].append(standardize_state(board, player))
-            states["players"].append(player)
+
+            winner = determine_winner(board)
+            if winner:
+                assert len(winner) == 1
+                visual.show_info(f"Player {player} won.")
+                for experience in experiences:
+                    experience["reward"] = 1.0 if experience["player"] == winner[0] else -1.0
+                break
             if move[-1] in ROSETTE:
                 # Play again on rosettes
                 continue
 
         player = (player + 1) % N_PLAYER
-        winner = determine_winner(board)
-        if winner:
-            visual.show_info(f"Player {player} won.")
-            states["winner"] = winner[0]
-            break
 
         iteration += 1
         if iteration > 1000:
             visual.show_info("Game is too long.")
             break
 
-    states["boards"] = np.stack(states["boards"], dtype=np.uint8)
-    states["players"] = np.array(states["players"], dtype=np.uint8)
-    return states
+    return experiences
 
 
 def play_human(screen):
