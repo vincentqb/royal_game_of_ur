@@ -91,7 +91,7 @@ def play_many(policies, num_games=50):
         selected = random.choices(policies, k=2)
         tasks.append([selected])
 
-    results = list(parallel_map(compare_play_wrapper, tasks))
+    results = list(parallel_map(compare_play_wrapper, tasks, description="Pairwise Play..."))
 
     with pd.option_context("display.float_format", "{:.0f}".format):
         elos = compare_elo(results)

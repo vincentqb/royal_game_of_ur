@@ -3,7 +3,9 @@ from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_compl
 
 import torch
 from loguru import logger
-from tqdm import tqdm
+from rich import print as rprint
+from rich.markup import escape
+from rich.progress import track
 
 dtype = torch.float32
 
@@ -13,7 +15,7 @@ def configure_logger(exp_dir):
 
     logger.remove()
     logger.add(exp_dir / "trace.log", level="TRACE", enqueue=True, serialize=True)
-    logger.add(lambda msg: tqdm.write(msg, end=""), colorize=True, level="INFO")
+    logger.add(lambda x: print(escape(x)), colorize=True, level="INFO")
 
     def showwarning_to_loguru(message, category, filename, lineno, file=None, line=None):
         formatted_message = warnings.formatwarning(message, category, filename, lineno, line)
@@ -22,7 +24,7 @@ def configure_logger(exp_dir):
     warnings.showwarning = showwarning_to_loguru
 
 
-def parallel_map(func, args, *, max_workers=16, use_threads=True):
+def parallel_map(func, args, *, description="Working...", max_workers=16, use_threads=True):
     """
     Applies func to items in args (list of tuples), preserving order.
 
@@ -36,8 +38,8 @@ def parallel_map(func, args, *, max_workers=16, use_threads=True):
         ExecutorClass = ThreadPoolExecutor if use_threads else ProcessPoolExecutor
         with ExecutorClass(max_workers=max_workers) as executor:
             futures = [executor.submit(func, *arg) for arg in args]
-            for future in tqdm(as_completed(futures), total=len(futures), ncols=0, leave=False):
+            for future in track(as_completed(futures), description=description, total=len(futures), transient=True):
                 yield future.result()
     else:
-        for arg in tqdm(args, ncols=0, leave=False):
+        for arg in track(args, description=description, total=len(futures), transient=True):
             yield func(*arg)

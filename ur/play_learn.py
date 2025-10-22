@@ -19,7 +19,7 @@ from game import (
 from loguru import logger
 from play_many import play_many as evaluate_models
 from policies import UrNet, select_move
-from tqdm import tqdm, trange
+from rich.progress import track
 from utils import configure_logger, dtype, parallel_map
 
 
@@ -168,13 +168,12 @@ def train(
     best_elo = 0.0
     best_model_path = exp_dir / "best_model.pt"
 
-    pbar = trange(num_epochs, ncols=0, desc="Epoch")
-    for iteration in pbar:
+    for iteration in track(range(num_epochs), description="Epoch"):
         net.eval()
 
         temperature = max(0.5, 3.0 - 2.5 * iteration / num_epochs)
         tasks = [(net, temperature, device) for _ in range(batch_size)]
-        for experiences in parallel_map(self_play_game, tasks):
+        for experiences in parallel_map(self_play_game, tasks, description="Self-Play..."):
             logger.trace(
                 "length of experiences: {length}",
                 length=max(len(experience) for experience in experiences),
@@ -193,7 +192,6 @@ def train(
 
         loss = loss / num_iterations
         logger.trace("Loss: {loss:.4f}", loss=loss, iteration=iteration)
-        pbar.set_postfix({"loss": f"{loss:.4f}"})
 
         # Save checkpoint and evaluate
         if (iteration + 1) % save_interval == 0:
