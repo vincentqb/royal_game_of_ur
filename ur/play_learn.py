@@ -19,7 +19,7 @@ from game import (
 from loguru import logger
 from play_many import play_many as evaluate_models
 from policies import UrNet, select_move
-from rich.box import SIMPLE_HEAVY
+from rich.box import HORIZONTALS
 from rich.live import Live
 from rich.progress import track
 from rich.table import Table
@@ -136,7 +136,7 @@ def generate_table(row, *, maxlen=10):
     rows = generate_table.queue = getattr(generate_table, "queue", deque(maxlen=maxlen))
     generate_table.queue.append(row)
 
-    table = Table(box=SIMPLE_HEAVY)
+    table = Table(box=HORIZONTALS)
 
     keys = []
     for row in rows:
