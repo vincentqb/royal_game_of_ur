@@ -146,7 +146,7 @@ def generate_table(row, *, maxlen=10):
     # keys = set(sum([list(row.keys()) for row in rows], []))
 
     for key in keys:
-        table.add_column(key)
+        table.add_column(key, justify="right")
 
     for row in rows:
         table.add_row(*[str(row[key]) if key in row else "" for key in keys])
