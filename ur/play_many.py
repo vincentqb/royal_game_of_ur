@@ -23,8 +23,8 @@ def compare_play_wrapper(selected):
             policies_to_compare.append(create_policy_neural(s))
 
     selected = [name.stem if isinstance(name, Path) else name for name in selected]
-    states = play(policies_to_compare)
-    winner = states["winner"]
+    experiences = play(policies_to_compare)
+    winner = experiences[-1]["winner"]
     return {
         **{k: v for k, v in enumerate(selected)},
         "winner_id": winner,

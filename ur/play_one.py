@@ -144,6 +144,8 @@ def play(policies, board=None, screen=None):
                 dice=dice,
                 start=move[0],
                 end=move[1],
+                winner=-1,
+                reward=0.0,
             )
             experiences.append(experience)
             execute_move(board, player, *move)
@@ -153,11 +155,15 @@ def play(policies, board=None, screen=None):
                 assert len(winner) == 1
                 visual.show_info(f"Player {player} won.")
                 for experience in experiences:
+                    experience["winner"] = winner[0]
                     experience["reward"] = 1.0 if experience["player"] == winner[0] else -1.0
                 break
             if move[-1] in ROSETTE:
                 # Play again on rosettes
                 continue
+
+        if winner:
+            break
 
         player = (player + 1) % N_PLAYER
 

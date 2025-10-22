@@ -55,6 +55,7 @@ def self_play_game(net, temperature, device):
     """
     board = create_board()
     player = 0
+    winner = []
     experiences = []
     iteration = 0
     max_iterations = 1000
@@ -88,6 +89,7 @@ def self_play_game(net, temperature, device):
                     assert len(winner) == 1
                     for experience in experiences:
                         experience["reward"] = 1.0 if experience["player"] == winner[0] else -1.0
+                    break
 
                 if move[-1] not in ROSETTE:
                     # Not a rosette
