@@ -3,7 +3,6 @@ from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_compl
 
 import torch
 from loguru import logger
-from rich import print as rprint
 from rich.markup import escape
 from rich.progress import track
 

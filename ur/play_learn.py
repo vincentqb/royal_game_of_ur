@@ -19,7 +19,10 @@ from game import (
 from loguru import logger
 from play_many import play_many as evaluate_models
 from policies import UrNet, select_move
+from rich.box import SIMPLE_HEAVY
+from rich.live import Live
 from rich.progress import track
+from rich.table import Table
 from utils import configure_logger, dtype, parallel_map
 
 
@@ -129,6 +132,28 @@ def train_batch(net, optimizer, batch, *, device):
     return policy_loss.item()
 
 
+def generate_table(row, *, maxlen=10):
+    rows = generate_table.queue = getattr(generate_table, "queue", deque(maxlen=maxlen))
+    generate_table.queue.append(row)
+
+    table = Table(box=SIMPLE_HEAVY)
+
+    keys = []
+    for row in rows:
+        for key in row.keys():
+            if key not in keys:
+                keys.append(key)
+    # keys = set(sum([list(row.keys()) for row in rows], []))
+
+    for key in keys:
+        table.add_column(key)
+
+    for row in rows:
+        table.add_row(*[str(row[key]) if key in row else "" for key in keys])
+
+    return table
+
+
 def train(
     *,
     exp_dir,
@@ -168,56 +193,63 @@ def train(
     best_elo = 0.0
     best_model_path = exp_dir / "best_model.pt"
 
-    for iteration in track(range(num_epochs), description="Epoch"):
-        net.eval()
+    with Live() as live:
+        for iteration in track(range(num_epochs), description="Epoch"):
+            net.eval()
 
-        temperature = max(0.5, 3.0 - 2.5 * iteration / num_epochs)
-        tasks = [(net, temperature, device) for _ in range(batch_size)]
-        for experiences in parallel_map(self_play_game, tasks, description="Self-Play..."):
-            logger.trace(
-                "length of experiences: {length}",
-                length=max(len(experience) for experience in experiences),
-                iteration=iteration,
-            )
-            buffer.extend(experiences)
+            temperature = max(0.5, 3.0 - 2.5 * iteration / num_epochs)
+            tasks = [(net, temperature, device) for _ in range(batch_size)]
+            for experiences in parallel_map(self_play_game, tasks, description="Self-Play..."):
+                logger.trace(
+                    "length of experiences: {length}",
+                    length=max(len(experience) for experience in experiences),
+                    iteration=iteration,
+                )
+                buffer.extend(experiences)
 
-        logger.trace("length of buffer: {length}", length=len(buffer), iteration=iteration)
+            logger.trace("length of buffer: {length}", length=len(buffer), iteration=iteration)
 
-        net.train()
+            net.train()
 
-        loss = 0.0
-        for _ in range(num_iterations):
-            batch = buffer.sample(batch_size)
-            loss += train_batch(net, optimizer, batch, device=device)
+            loss = 0.0
+            for _ in range(num_iterations):
+                batch = buffer.sample(batch_size)
+                loss += train_batch(net, optimizer, batch, device=device)
 
-        loss = loss / num_iterations
-        logger.trace("Loss: {loss:.4f}", loss=loss, iteration=iteration)
+            loss = loss / num_iterations
+            logger.trace("Loss: {loss:.4f}", loss=loss, iteration=iteration)
+            row = {"Iteration": str(iteration), "Loss": f"{loss:.0f}"}
 
-        # Save checkpoint and evaluate
-        if (iteration + 1) % save_interval == 0:
-            checkpoint_path = exp_dir / f"checkpoint_{iteration + 1:05d}.pt"
+            # Save checkpoint and evaluate
+            if (iteration + 1) % save_interval == 0:
+                checkpoint_path = exp_dir / f"checkpoint_{iteration + 1:05d}.pt"
 
-            torch.save(
-                {
-                    "iteration": iteration,
-                    "model_state_dict": net.state_dict(),
-                    "optimizer_state_dict": optimizer.state_dict(),
-                },
-                checkpoint_path,
-            )
-            logger.debug("Checkpoint saved to {path}", path=checkpoint_path)
+                torch.save(
+                    {
+                        "iteration": iteration,
+                        "model_state_dict": net.state_dict(),
+                        "optimizer_state_dict": optimizer.state_dict(),
+                    },
+                    checkpoint_path,
+                )
+                logger.debug("Checkpoint saved to {path}", path=checkpoint_path)
 
-            # Now evaluate saved model
-            elos, pairwise = evaluate_models([checkpoint_path, "policy_random", "policy_aggressive"])
-            neural_elo = elos[checkpoint_path.stem]
+                # Now evaluate saved model
+                elos, pairwise = evaluate_models([checkpoint_path, "policy_random", "policy_aggressive"])
+                neural_elo = elos[checkpoint_path.stem]
+                row["ELO"] = f"{neural_elo:.0f}"
 
-            # Update best model symlink if best
-            if neural_elo > best_elo:
-                best_elo = neural_elo
-                if best_model_path.exists() or best_model_path.is_symlink():
-                    best_model_path.unlink()
-                best_model_path.symlink_to(checkpoint_path.name)
-                logger.success("New Best ELO: {elo:.0f}", elo=neural_elo)
+                # Update best model symlink if best
+                if neural_elo > best_elo:
+                    best_elo = neural_elo
+                    if best_model_path.exists() or best_model_path.is_symlink():
+                        best_model_path.unlink()
+                    best_model_path.symlink_to(checkpoint_path.name)
+                    logger.success("New Best ELO: {elo:.0f}", elo=neural_elo)
+                if best_elo > 0:
+                    row["Best ELO"] = f"{best_elo:.0f}"
+
+            live.update(generate_table(row))
 
     logger.success("Observed Best ELO: {elo:.0f}", elo=best_elo)
 
