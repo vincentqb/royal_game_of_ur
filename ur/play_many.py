@@ -1,9 +1,11 @@
 import random
 from pathlib import Path
 
-import pandas as pd
 from game import N_PLAYER
 from play_one import play
+from rich.box import HORIZONTALS
+from rich.console import Console
+from rich.table import Table
 from utils import parallel_map
 
 
@@ -58,7 +60,7 @@ def compare_elo(results):
                 elos[name_w] += LR * (1 - P_W)
                 elos[name_l] += LR * (0 - P_L)
 
-    elos = pd.Series(elos, name="ELO").sort_values()
+    elos = dict(sorted(elos.items(), key=lambda x: x[1]))
     return elos
 
 
@@ -66,11 +68,21 @@ def compare_pairwise(results):
     """Calculate pairwise win rates."""
     col_players = list(range(N_PLAYER))
     results = [r for r in results if r["winner_id"] >= 0]
-    results = pd.DataFrame(results, columns=col_players + ["winner_id", "winner_name"])
-    results["pair_id"] = results[col_players].apply(lambda x: " ".join(sorted(x)), axis=1)
-    results = results[results[col_players].nunique(axis=1) > 1]
-    results = results.groupby("pair_id", as_index=False)["winner_name"].value_counts(normalize=True)
-    return results
+
+    count = {}
+    for result in results:
+        key = tuple(frozenset(list(result[i] for i in col_players)))
+        winner_name = result["winner_name"]
+        count[key] = count.get(key, {})
+        count[key][winner_name] = count[key].get(winner_name, 0) + 1
+    for key, values in count.items():
+        for k in key:
+            count[key][k] = count[key].get(k, 0)
+        total = sum(values.values())
+        count[key] = {k: v / total for k, v in count[key].items()}
+    count = {k: {max(v, key=v.get): v[max(v, key=v.get)]} for k, v in count.items()}
+    count = dict(sorted(count.items()))
+    return count
 
 
 def play_many(policies, num_games=50):
@@ -88,18 +100,33 @@ def play_many(policies, num_games=50):
 
     tasks = []
     for _ in range(100):
-        selected = random.choices(policies, k=2)
+        selected = random.sample(policies, k=2)
         tasks.append([selected])
-
     results = list(parallel_map(compare_play_wrapper, tasks, description="Pairwise Play..."))
 
-    with pd.option_context("display.float_format", "{:.0f}".format):
-        elos = compare_elo(results)
-        print(f"ELO Ratings:\n{elos}")
+    elos = compare_elo(results)
 
-    with pd.option_context("display.float_format", "{:.4f}".format):
-        pairwise = compare_pairwise(results)
-        print(f"Pairwise Win Rates:\n{pairwise}")
+    table = Table(box=HORIZONTALS)
+    table.add_column("Player", justify="right")
+    table.add_column("ELO", justify="right")
+    for key, value in elos.items():
+        table.add_row(key, f"{value:.0f}")
+    console = Console()
+    console.print(table)
+
+    pairwise = compare_pairwise(results)
+
+    table = Table(box=HORIZONTALS)
+    table.add_column("Player", justify="right")
+    table.add_column("Player", justify="right")
+    table.add_column("Winner", justify="right")
+    table.add_column("Rate", justify="right")
+    for key, values in pairwise.items():
+        key = list(key)
+        values = sum([list(t) for t in values.items()], [])
+        table.add_row(*key, values[0], f"{values[1]:.1%}")
+    console = Console()
+    console.print(table)
 
     return elos, pairwise
 
