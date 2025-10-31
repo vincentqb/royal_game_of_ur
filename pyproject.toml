@@ -4,30 +4,18 @@ classifiers = [
   "License :: OSI Approved :: MIT License",
   "Programming Language :: Python :: 3"
 ]
+dependencies = [
+  "loguru",
+  "numpy",
+  "pandas",
+  "rich",
+  "torch"
+]
 description = "Royal Game of Ur"
 name = "ur"
 readme = "README.md"
-version = "0.1.0"
 requires-python = ">=3.12"
-dependencies = [
-    "loguru",
-    "numpy",
-    "pandas",
-    "torch",
-    "tqdm",
-]
-
-[tool.hatch.build.targets.wheel]
-packages = ["ur"]
-
-[project.optional-dependencies]
-dev = [
-  "codespell",
-  "coverage",
-  "pre-commit",
-  "pytest",
-  "ruff>=0.5.3"
-]
+version = "0.1.0"
 
 [tool.coverage.report]
 fail_under = 80
@@ -35,6 +23,9 @@ show_missing = false
 
 [tool.coverage.run]
 source = ["."]
+
+[tool.hatch.build.targets.wheel]
+packages = ["ur"]
 
 [tool.ruff]
 line-length = 120

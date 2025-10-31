@@ -1,3 +1,4 @@
+import sysconfig
 import warnings
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 
@@ -21,6 +22,9 @@ def configure_logger(exp_dir):
         logger.warning(formatted_message)
 
     warnings.showwarning = showwarning_to_loguru
+
+    is_freethreaded = bool(sysconfig.get_config_var("Py_GIL_DISABLED"))
+    logger.trace(f"Python free-threading: {'ON' if is_freethreaded else 'OFF'}", is_freethreaded=is_freethreaded)
 
 
 def parallel_map(func, args, *, description="Working...", max_workers=16, use_threads=True):
