@@ -9,7 +9,7 @@ dependencies = [
   "numpy",
   "pandas",
   "rich",
-  "torch"
+  "torch>=2.9"
 ]
 description = "Royal Game of Ur"
 name = "ur"
