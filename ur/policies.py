@@ -1,34 +1,90 @@
-import curses
+import readchar
 import random
 
+from rich.padding import Padding
 import numpy as np
+from readchar import key
 import torch
 import torch.nn as nn
 from game import COMMON, N_BOARD, N_PLAYER, ROSETTE
+from rich.table import Table
 from utils import dtype
+
+ROWS = N_PLAYER + 1
+COLS = len(COMMON)
+SHIFT_TAB = '\x1b[Z'   # ESC [ Z
+
+
+def map_to_grid(position, player):
+    COMMON_ROW = 1
+    MAP = [i if i < COMMON_ROW else i + 1 for i in range(N_PLAYER)]
+    if position in COMMON:
+        y = COMMON_ROW
+        x = position - min(COMMON)
+    elif position < min(COMMON):
+        y = MAP[player]
+        x = min(COMMON) - 1 - position
+    elif position > max(COMMON):
+        y = MAP[player]
+        x = min(COMMON) + 1 + N_BOARD - position
+    return y, x
+
+
+def show_board(board, *, current_piece, current_player, visual):
+    rows = [["   " for _ in range(COLS)] for _ in range(ROWS)]
+
+    for rosette in ROSETTE:
+        for player in range(N_PLAYER):
+            y, x = map_to_grid(rosette, player)
+            rows[y][x] = " [bold]★[/bold] "
+
+    for player in range(N_PLAYER):
+        for i in [0, len(board[0]) - 1]:
+            y, x = map_to_grid(i, player)
+            rows[y][x] = f" [bold]{int(board[player][i].item())}[/bold] "
+
+        pieces = np.nonzero(board[player, :-1])[-1].tolist()
+        for i in range(len(pieces)):
+            y, x = map_to_grid(pieces[i], player)
+            if player == current_player and pieces[i] == current_piece:
+                style = "reverse"
+            else:
+                style = "bold"
+            if 0 < i < N_BOARD - 1:
+                label = player
+                color = "white"
+            else:
+                print(board.shape, N_BOARD, i)
+                label = int(board[player][i].item())
+                color = "green"  # FIXME  why is last not green?
+            rows[y][x] = f" [{color}][{style}]{label}[/{style}][/{color}] "
+
+    table = Table(show_edge=True, show_lines=True, show_header=False, padding=1, collapse_padding=False)
+    for row in rows:
+        table.add_row(*row)
+    table = Padding(table, pad=(1, 1, 1, 1))
+    visual.update(table)
 
 
 def policy_human(*, board, player, moves, visual, **_):
     move_index = 0
     while True:
-        visual.show_pieces(board, current_piece=moves[move_index][0], current_player=player)
+        show_board(board, current_piece=moves[move_index][0], current_player=player, visual=visual)
 
-        # Get user input
-        key = visual.screen.getch()
-        if key == ord("q"):
+        k = readchar.readkey()
+
+        if k == "q":
             return -1
-        elif key == ord("\t"):
-            # Tab to cycle
-            move_index = (move_index + 1) % len(moves)
-        elif key == curses.KEY_BTAB:
-            # Shift+Tab to cycle backward
+        elif k == key.LEFT:
             move_index = (move_index - 1) % len(moves)
-        elif key == curses.KEY_LEFT:
-            move_index = (move_index - 1) % len(moves)
-        elif key == curses.KEY_RIGHT:
+        elif k == key.RIGHT:
             move_index = (move_index + 1) % len(moves)
-        elif key == 10:  # Enter key to confirm move
-            return moves[int(move_index)]
+        elif k == key.TAB:
+            move_index = (move_index + 1) % len(moves)
+        elif k == SHIFT_TAB:
+            move_index = (move_index - 1) % len(moves)
+        elif k == key.ENTER:
+            return moves[move_index]
 
 
 def policy_first(*, moves, **_):
