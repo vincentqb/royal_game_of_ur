@@ -1,6 +1,4 @@
-import curses
 from contextlib import nullcontext
-from time import sleep
 
 from game import (
     N_PLAYER,
@@ -80,7 +78,6 @@ def play(policies, board=None, show=False):
 
 def play_human():
     play([policy_human, policy_human], show=True)
-    sleep(1)
 
 
 if __name__ == "__main__":

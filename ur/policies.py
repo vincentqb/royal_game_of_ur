@@ -1,18 +1,18 @@
-import readchar
 import random
 
-from rich.padding import Padding
 import numpy as np
-from readchar import key
+import readchar
 import torch
 import torch.nn as nn
 from game import COMMON, N_BOARD, N_PLAYER, ROSETTE
+from readchar import key
+from rich.padding import Padding
 from rich.table import Table
 from utils import dtype
 
 ROWS = N_PLAYER + 1
 COLS = len(COMMON)
-SHIFT_TAB = '\x1b[Z'   # ESC [ Z
+SHIFT_TAB = "\x1b[Z"  # ESC [ Z
 
 
 def map_to_grid(position, player):
