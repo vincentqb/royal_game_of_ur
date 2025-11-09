@@ -25,7 +25,7 @@ def play(policies, board=None, show=False):
 
     experiences = []
 
-    with Live() if show else nullcontext() as visual:
+    with Live(auto_refresh=False) if show else nullcontext() as visual:
         while True:
             dice = throw()
             moves = get_legal_moves(board, player, dice)

@@ -63,7 +63,7 @@ def show_board(board, *, current_piece, current_player, visual):
     for row in rows:
         table.add_row(*row)
     table = Padding(table, pad=(1, 1, 1, 1))
-    visual.update(table)
+    visual.update(table, refresh=True)
 
 
 def policy_human(*, board, player, moves, visual, **_):
