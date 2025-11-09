@@ -59,7 +59,8 @@ def play(policies, board=None, show=False):
                         experience["reward"] = 1.0 if experience["player"] == winner[0] else -1.0
                     break
                 if move[-1] in ROSETTE:
-                    # Play again on rosettes
+                    if show:
+                        print(f"Player {player} plays again.")
                     continue
 
             if winner:
