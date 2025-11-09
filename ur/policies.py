@@ -41,7 +41,10 @@ def show_board(board, *, current_piece, current_player, visual):
     for player in range(N_PLAYER):
         for i in [0, len(board[0]) - 1]:
             y, x = map_to_grid(i, player)
-            rows[y][x] = f" [bold]{int(board[player][i].item())}[/bold] "
+            style = "bold"
+            label = int(board[player][i].item())
+            color = "green"
+            rows[y][x] = f" [{color}][{style}]{label}[/{style}][/{color}] "
 
         pieces = np.nonzero(board[player, :-1])[-1].tolist()
         for i in range(len(pieces)):
@@ -54,9 +57,8 @@ def show_board(board, *, current_piece, current_player, visual):
                 label = player
                 color = "white"
             else:
-                print(board.shape, N_BOARD, i)
                 label = int(board[player][i].item())
-                color = "green"  # FIXME  why is last not green?
+                color = "green"
             rows[y][x] = f" [{color}][{style}]{label}[/{style}][/{color}] "
 
     table = Table(show_edge=True, show_lines=True, show_header=False, padding=1, collapse_padding=False)
