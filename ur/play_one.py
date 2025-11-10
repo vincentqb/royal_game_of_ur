@@ -1,3 +1,4 @@
+import random
 from contextlib import nullcontext
 
 from game import (
@@ -16,12 +17,14 @@ from rich.live import Live
 
 
 def play(policies, board=None, show=False):
-    player = 0  # Starting player
+    player = random.randrange(N_PLAYER)
     board = create_board() if board is None else board
     winner = []
     iteration = 0
-
     experiences = []
+
+    if show:
+        print(f"Player {player} starts.")
 
     with Live(auto_refresh=False) if show else nullcontext() as visual:
         while True:

@@ -57,7 +57,7 @@ def self_play_game(net, temperature, device):
         experiences: List of (board, move_probs, reward) tuples
     """
     board = create_board()
-    player = 0
+    player = random.randrange(N_PLAYER)
     winner = []
     experiences = []
     iteration = 0
