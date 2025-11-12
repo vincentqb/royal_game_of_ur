@@ -3,6 +3,7 @@ from pathlib import Path
 
 from game import N_PLAYER
 from play_one import play
+from rich import print
 from rich.box import HORIZONTALS
 from rich.console import Console
 from rich.table import Table
@@ -85,7 +86,7 @@ def compare_pairwise(results):
     return count
 
 
-def play_many(policies, num_games=50):
+def play_many(policies, *, show=True, num_games=500):
     """
     Evaluate multiple models against baseline policies using ELO.
 
@@ -111,8 +112,8 @@ def play_many(policies, num_games=50):
     table.add_column("ELO", justify="right")
     for key, value in elos.items():
         table.add_row(key, f"{value:.0f}")
-    console = Console()
-    console.print(table)
+    if show:
+        print(table)
 
     pairwise = compare_pairwise(results)
 
@@ -125,8 +126,8 @@ def play_many(policies, num_games=50):
         key = list(key)
         values = sum([list(t) for t in values.items()], [])
         table.add_row(*key, values[0], f"{values[1]:.1%}")
-    console = Console()
-    console.print(table)
+    if show:
+        print(table)
 
     return elos, pairwise
 

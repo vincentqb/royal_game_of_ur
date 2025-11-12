@@ -1,3 +1,7 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
 [project]
 authors = [{name = "Vincent QB", email = "vincentqb@gmail.com"}]
 classifiers = [

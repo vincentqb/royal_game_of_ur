@@ -132,26 +132,29 @@ def train_batch(net, optimizer, batch, *, device):
     return policy_loss.item()
 
 
-def generate_table(row, *, maxlen=10):
-    rows = generate_table.queue = getattr(generate_table, "queue", deque(maxlen=maxlen))
-    generate_table.queue.append(row)
+class TableQueue:
+    def __init__(self, *, maxlen=10):
+        self.queue = deque(maxlen=maxlen)
 
-    table = Table(box=HORIZONTALS)
+    def __call__(self, row):
+        self.queue.append(row)
 
-    keys = []
-    for row in rows:
-        for key in row.keys():
-            if key not in keys:
-                keys.append(key)
-    # keys = set(sum([list(row.keys()) for row in rows], []))
+        table = Table(box=HORIZONTALS)
 
-    for key in keys:
-        table.add_column(key, justify="right")
+        keys = []
+        for row in self.queue:
+            for key in row.keys():
+                if key not in keys:
+                    keys.append(key)
+        # keys = set(sum([list(row.keys()) for row in self.queue], []))
 
-    for row in rows:
-        table.add_row(*[str(row[key]) if key in row else "" for key in keys])
+        for key in keys:
+            table.add_column(key, justify="right")
 
-    return table
+        for row in self.queue:
+            table.add_row(*[str(row[key]) if key in row else "" for key in keys])
+
+        return table
 
 
 def train(
@@ -193,7 +196,10 @@ def train(
     best_elo = 0.0
     best_model_path = exp_dir / "best_model.pt"
 
-    with Live() as live:
+    table_epoch = TableQueue(maxlen=10)
+    table_elo = TableQueue(maxlen=5)
+
+    with Live() as live_elo, Live() as live_epoch:
         for iteration in track(range(num_epochs), description="Epoch"):
             net.eval()
 
@@ -218,7 +224,7 @@ def train(
 
             loss = loss / num_iterations
             logger.trace("Loss: {loss:.4f}", loss=loss, iteration=iteration)
-            row = {"Iteration": str(iteration), "Loss": f"{loss:.0f}"}
+            row_epoch = {"Iteration": str(iteration), "Loss": f"{loss:.0f}"}
 
             # Save checkpoint and evaluate
             if (iteration + 1) % save_interval == 0:
@@ -235,9 +241,8 @@ def train(
                 logger.debug("Checkpoint saved to {path}", path=checkpoint_path)
 
                 # Now evaluate saved model
-                elos, pairwise = evaluate_models([checkpoint_path, "policy_random", "policy_aggressive"])
+                elos, pairwise = evaluate_models([checkpoint_path, "policy_random", "policy_aggressive"], show=False)
                 neural_elo = elos[checkpoint_path.stem]
-                row["ELO"] = f"{neural_elo:.0f}"
 
                 # Update best model symlink if best
                 if neural_elo > best_elo:
@@ -245,13 +250,22 @@ def train(
                     if best_model_path.exists() or best_model_path.is_symlink():
                         best_model_path.unlink()
                     best_model_path.symlink_to(checkpoint_path.name)
-                    logger.success("New Best ELO: {elo:.0f}", elo=neural_elo)
+                    logger.debug("New Best ELO: {elo:.0f}", elo=neural_elo)
                 if best_elo > 0:
-                    row["Best ELO"] = f"{best_elo:.0f}"
+                    row_epoch["Best ELO"] = f"{best_elo:.0f}"
+                live_elo.update(
+                    table_elo(
+                        {
+                            "Iteration": str(iteration),
+                            "ELO": f"{neural_elo:.0f}",
+                            "Best": f"{best_elo:.0f}",
+                        }
+                    )
+                )
 
-            live.update(generate_table(row))
+            live_epoch.update(table_epoch(row_epoch))
 
-    logger.success("Observed Best ELO: {elo:.0f}", elo=best_elo)
+    logger.debug("Best ELO Observed: {elo:.0f}", elo=best_elo)
 
     return checkpoint_path
 
