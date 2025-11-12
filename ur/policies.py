@@ -117,23 +117,19 @@ class UrNet(nn.Module):
     def __init__(self, input_size=(N_PLAYER * (N_BOARD + 2)), hidden_size=128, device=None, return_value=False):
         super().__init__()
 
-        self.shared = nn.ModuleList(
-            [
-                nn.Linear(input_size, hidden_size, dtype=dtype, device=device),
-                nn.Linear(hidden_size, hidden_size, dtype=dtype, device=device),
-                nn.Linear(hidden_size, hidden_size // 2, dtype=dtype, device=device),
-            ]
-        )
+        self.shared = nn.ModuleList([
+            nn.Linear(input_size, hidden_size, dtype=dtype, device=device),
+            nn.Linear(hidden_size, hidden_size, dtype=dtype, device=device),
+            nn.Linear(hidden_size, hidden_size // 2, dtype=dtype, device=device),
+        ])
 
         self.policy = nn.Linear(hidden_size // 2, N_BOARD + 2, dtype=dtype, device=device)
 
         self.return_value = return_value
         if self.return_value:
-            self.value = nn.ModuleList(
-                [
-                    nn.Linear(hidden_size // 2, hidden_size // 4, dtype=dtype, device=device),
-                ]
-            )
+            self.value = nn.ModuleList([
+                nn.Linear(hidden_size // 2, hidden_size // 4, dtype=dtype, device=device),
+            ])
             self.value_final = nn.Linear(hidden_size // 4, 1, dtype=dtype, device=device)
 
     def forward(self, x):

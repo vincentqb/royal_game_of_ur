@@ -254,13 +254,11 @@ def train(
                 if best_elo > 0:
                     row_epoch["Best ELO"] = f"{best_elo:.0f}"
                 live_elo.update(
-                    table_elo(
-                        {
-                            "Iteration": str(iteration),
-                            "ELO": f"{neural_elo:.0f}",
-                            "Best": f"{best_elo:.0f}",
-                        }
-                    )
+                    table_elo({
+                        "Iteration": str(iteration),
+                        "ELO": f"{neural_elo:.0f}",
+                        "Best": f"{best_elo:.0f}",
+                    })
                 )
 
             live_epoch.update(table_epoch(row_epoch))

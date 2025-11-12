@@ -133,12 +133,11 @@ def play_many(policies, *, show=True, num_games=500):
 
 
 if __name__ == "__main__":
-    play_many(
-        [
-            "policy_first",
-            "policy_last",
-            "policy_random",
-            "policy_aggressive",
-            Path("experiments/20251012_141628/checkpoint_00500.pt"),
-        ]
-    )
+    play_many([
+        "policy_first",
+        "policy_last",
+        "policy_random",
+        "policy_aggressive",
+        Path("experiments/20251012_141628/checkpoint_00500.pt"),
+        Path("experiments/20251111_181533/checkpoint_00850.pt"),
+    ])
