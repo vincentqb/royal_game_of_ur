@@ -191,7 +191,7 @@ def get_move_mask(moves, *, device):
     return mask, move_map
 
 
-def policy_neural(*, board, player, moves, net, device, temperature=1.0, training=True):
+def policy_neural(*, std_board, player, moves, net, device, temperature=1.0, training=True):
     """
     Select move using policy network with dice-based masking.
 
@@ -211,6 +211,7 @@ def policy_neural(*, board, player, moves, net, device, temperature=1.0, trainin
     if not moves:
         return None, None
 
+    board = std_board
     with torch.inference_mode():
         board = torch.from_numpy(board.astype(np.float32).flatten()).to(device).to(dtype)
 

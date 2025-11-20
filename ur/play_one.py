@@ -17,10 +17,11 @@ from rich.live import Live
 
 
 def play(policies, board=None, show=False):
-    player = random.randrange(N_PLAYER)
     board = create_board() if board is None else board
+    player = random.randrange(N_PLAYER)
     winner = []
     iteration = 0
+    max_iterations = 1000
     experiences = []
 
     if show:
@@ -35,13 +36,16 @@ def play(policies, board=None, show=False):
                 print(f"Player {player} threw {dice}.")
 
             if moves:
-                move = policies[player](board=board, player=player, moves=moves, visual=visual if show else None)
+                std_board = standardize_state(board, player)
+                move = policies[player](
+                    board=board, std_board=std_board, player=player, moves=moves, visual=visual if show else None
+                )
                 if move == -1:
                     if show:
                         print("Players quit.")
                     break
                 experience = dict(
-                    board=standardize_state(board, player).copy(),
+                    board=std_board.copy(),
                     player=player,
                     dice=dice,
                     start=move[0],
@@ -61,18 +65,16 @@ def play(policies, board=None, show=False):
                         experience["winner"] = winner[0]
                         experience["reward"] = 1.0 if experience["player"] == winner[0] else -1.0
                     break
+
                 if move[-1] in ROSETTE:
                     if show:
                         print(f"Player {player} plays again.")
                     continue
 
-            if winner:
-                break
-
             player = (player + 1) % N_PLAYER
 
             iteration += 1
-            if iteration > 1000:
+            if iteration > max_iterations:
                 if show:
                     print("Game is too long.")
                 break

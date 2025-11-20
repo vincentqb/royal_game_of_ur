@@ -59,13 +59,13 @@ def self_play_game(net, temperature, device):
     board = create_board()
     player = random.randrange(N_PLAYER)
     winner = []
-    experiences = []
     iteration = 0
     max_iterations = 1000
+    experiences = []
 
     net = net.to(device)
 
-    while iteration < max_iterations:
+    while True:
         dice = throw()
         moves = get_legal_moves(board, player, dice)
 
@@ -73,7 +73,7 @@ def self_play_game(net, temperature, device):
             std_board = standardize_state(board, player)
             move, probs = policy_neural(
                 net=net,
-                board=std_board,
+                std_board=std_board,
                 player=player,
                 moves=moves,
                 device=device,
@@ -88,6 +88,7 @@ def self_play_game(net, temperature, device):
                     dice=dice,
                     start=move[0],
                     end=move[1],
+                    winner=-1,
                     probs=probs.cpu().numpy(),
                 )
                 experiences.append(experience)
@@ -97,18 +98,18 @@ def self_play_game(net, temperature, device):
                 if winner:
                     assert len(winner) == 1
                     for experience in experiences:
+                        experience["winner"] = winner[0]
                         experience["reward"] = 1.0 if experience["player"] == winner[0] else -1.0
                     break
 
-                if move[-1] not in ROSETTE:
-                    # Not a rosette
-                    player = (player + 1) % N_PLAYER
-            else:
-                player = (player + 1) % N_PLAYER
-        else:
-            player = (player + 1) % N_PLAYER
+                if move[-1] in ROSETTE:
+                    continue
+
+        player = (player + 1) % N_PLAYER
 
         iteration += 1
+        if iteration > max_iterations:
+            break
     return experiences
 
 
