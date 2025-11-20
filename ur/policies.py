@@ -159,10 +159,10 @@ class UrNet(nn.Module):
         return policy_logits, value
 
 
-def load_model(model_path, device):
+def load_model(path, device, Net=UrNet):
     """Load model from checkpoint."""
-    net = UrNet(device=device)
-    checkpoint = torch.load(model_path, map_location=device, weights_only=True)
+    net = Net(device=device)
+    checkpoint = torch.load(path, map_location=device, weights_only=True)
 
     if isinstance(checkpoint, dict) and "model_state_dict" in checkpoint:
         net.load_state_dict(checkpoint["model_state_dict"])
@@ -191,7 +191,19 @@ def get_move_mask(moves, *, device):
     return mask, move_map
 
 
-def policy_neural(*, std_board, player, moves, net, device, temperature=1.0, training=True):
+def policy_neural(
+    *,
+    std_board,
+    player,
+    moves,
+    temperature=1.0,
+    path=None,
+    net=None,
+    device=None,
+    Net=UrNet,
+    training=False,
+    **_,
+):
     """
     Select move using policy network with dice-based masking.
 
@@ -210,6 +222,9 @@ def policy_neural(*, std_board, player, moves, net, device, temperature=1.0, tra
     """
     if not moves:
         return None, None
+
+    if path is not None:
+        net = load_model(path, device, Net=Net)
 
     board = std_board
     with torch.inference_mode():
@@ -238,26 +253,12 @@ def policy_neural(*, std_board, player, moves, net, device, temperature=1.0, tra
         return move
 
 
-def create_policy_neural(model_path):
-    """
-    Create a policy_neural function for a specific model.
-
-    This creates a policy function that can be used with play_one.play()
-    and can be pickled for multiprocessing.
-
-    Args:
-        model_path: Path to saved model checkpoint
-
-    Returns:
-        Policy function compatible with play_one interface
-    """
-
-    # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    device = torch.device("cpu")
-
-    net = load_model(model_path, device)
-
-    def policy_neural(**kwargs):
-        return policy_neural(net=net, device=device, training=False, **kwargs)
-
-    return policy_neural
+POLICIES = {
+    # "human": policy_human,
+    "random": policy_random,
+    "first": policy_first,
+    "last": policy_last,
+    "aggressive": policy_aggressive,
+    "urnet_00350": lambda **kwargs: policy_neural(path="experiments/20251111_181533/checkpoint_00350.pt", **kwargs),
+    "urnet_00850": lambda **kwargs: policy_neural(path="experiments/20251111_181533/checkpoint_00850.pt", **kwargs),
+}

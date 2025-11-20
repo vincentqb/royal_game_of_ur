@@ -1,8 +1,8 @@
 import random
-from pathlib import Path
 
 from game import N_PLAYER
 from play_one import play
+from policies import POLICIES
 from rich import print
 from rich.box import HORIZONTALS
 from rich.table import Table
@@ -12,20 +12,7 @@ from utils import parallel_map
 def compare_play_wrapper(selected):
     """Play a game between two policies and return result."""
 
-    policies_to_compare = []
-    for s in selected:
-        import policies
-
-        if hasattr(policies, str(s)):
-            policies_to_compare.append(getattr(policies, str(s)))
-        else:
-            # path to model
-            from policies import create_policy_neural
-
-            policies_to_compare.append(create_policy_neural(s))
-
-    selected = [name.stem if isinstance(name, Path) else name for name in selected]
-    experiences = play(policies_to_compare)
+    experiences = play([POLICIES[policy] for policy in selected])
     winner = experiences[-1]["winner"]
     return {
         **{k: v for k, v in enumerate(selected)},
@@ -98,10 +85,7 @@ def play_many(policies, *, show=True, num_games=500):
         pairwise: DataFrame of pairwise win rates
     """
 
-    tasks = []
-    for _ in range(100):
-        selected = random.sample(policies, k=2)
-        tasks.append([selected])
+    tasks = [[random.sample(policies, k=2)] for _ in range(100)]
     results = list(parallel_map(compare_play_wrapper, tasks, description="Pairwise Play..."))
 
     elos = compare_elo(results)
@@ -132,11 +116,4 @@ def play_many(policies, *, show=True, num_games=500):
 
 
 if __name__ == "__main__":
-    play_many([
-        "policy_first",
-        "policy_last",
-        "policy_random",
-        "policy_aggressive",
-        Path("experiments/20251012_141628/checkpoint_00500.pt"),
-        Path("experiments/20251111_181533/checkpoint_00850.pt"),
-    ])
+    play_many(sorted(POLICIES.keys()))
