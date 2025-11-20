@@ -108,6 +108,8 @@ def policy_aggressive(*, board, player, moves, **_):
             return move
         if move[-1] in ROSETTE:
             return move
+        # if move[0] in ROSETTE:
+        #     continue
     return move
 
 
