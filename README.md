@@ -1,5 +1,7 @@
 # Royal Game of Ur
 
+Run using uv
+
 ```sh
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
@@ -23,3 +25,5 @@ uv venv
 source .venv/bin/activate
 uv pip install .
 ```
+
+and install [git large file extension](https://github.com/git-lfs/git-lfs/blob/main/INSTALLING.md).
