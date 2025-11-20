@@ -5,7 +5,6 @@ from game import N_PLAYER
 from play_one import play
 from rich import print
 from rich.box import HORIZONTALS
-from rich.console import Console
 from rich.table import Table
 from utils import parallel_map
 

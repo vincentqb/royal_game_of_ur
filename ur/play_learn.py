@@ -18,7 +18,7 @@ from game import (
 )
 from loguru import logger
 from play_many import play_many as evaluate_models
-from policies import UrNet, select_move
+from policies import UrNet, policy_neural
 from rich.box import HORIZONTALS
 from rich.live import Live
 from rich.progress import track
@@ -71,8 +71,14 @@ def self_play_game(net, temperature, device):
 
         if moves:
             std_board = standardize_state(board, player)
-            move, probs = select_move(
-                net, std_board, player, moves, device=device, temperature=temperature, training=True
+            move, probs = policy_neural(
+                net=net,
+                board=std_board,
+                player=player,
+                moves=moves,
+                device=device,
+                temperature=temperature,
+                training=True,
             )
 
             if move:

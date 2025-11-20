@@ -191,7 +191,7 @@ def get_move_mask(moves, *, device):
     return mask, move_map
 
 
-def select_move(net, board, player, moves, *, device, temperature=1.0, training=True):
+def policy_neural(*, board, player, moves, net, device, temperature=1.0, training=True):
     """
     Select move using policy network with dice-based masking.
 
@@ -232,7 +232,9 @@ def select_move(net, board, player, moves, *, device, temperature=1.0, training=
         if move is None:
             move = random.choice(moves)
 
-        return move, probs
+        if training:
+            return move, probs
+        return move
 
 
 def create_policy_neural(model_path):
@@ -248,12 +250,13 @@ def create_policy_neural(model_path):
     Returns:
         Policy function compatible with play_one interface
     """
+
     # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     device = torch.device("cpu")
+
     net = load_model(model_path, device)
 
-    def policy_neural(board, player, moves, **kwargs):
-        move, _ = select_move(net, board, player, moves, device=device, training=False)
-        return move
+    def policy_neural(**kwargs):
+        return policy_neural(net=net, device=device, training=False, **kwargs)
 
     return policy_neural
