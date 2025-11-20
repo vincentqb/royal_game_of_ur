@@ -12,7 +12,7 @@ from utils import parallel_map
 def compare_play_wrapper(selected):
     """Play a game between two policies and return result."""
 
-    experiences = play([POLICIES[policy] for policy in selected])
+    experiences = play(selected)
     winner = experiences[-1]["winner"]
     return {
         **{k: v for k, v in enumerate(selected)},
@@ -116,4 +116,4 @@ def play_many(policies, *, show=True, num_games=500):
 
 
 if __name__ == "__main__":
-    play_many(sorted(POLICIES.keys()))
+    play_many(sorted(policy for policy in POLICIES.keys() if policy != "human"))

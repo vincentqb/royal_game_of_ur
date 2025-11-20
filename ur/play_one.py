@@ -11,7 +11,7 @@ from game import (
     standardize_state,
     throw,
 )
-from policies import policy_human
+from policies import POLICIES
 from rich import print
 from rich.live import Live
 
@@ -23,6 +23,8 @@ def play(policies, board=None, show=False):
     iteration = 0
     max_iterations = 1000
     experiences = []
+
+    policies = [POLICIES[policy] for policy in policies]
 
     if show:
         print(f"Player {player} starts.")
@@ -82,10 +84,12 @@ def play(policies, board=None, show=False):
     return experiences
 
 
-def play_human():
-    play([policy_human, policy_human], show=True)
-
-
 if __name__ == "__main__":
-    # play([policy_random, policy_random])
-    play_human()
+    play(
+        [
+            "human",
+            "urnet_00350",
+        ],
+        show=True,
+    )
+    # play(["human", "human"], show=True)

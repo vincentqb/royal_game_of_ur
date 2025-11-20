@@ -254,7 +254,7 @@ def policy_neural(
 
 
 POLICIES = {
-    # "human": policy_human,
+    "human": policy_human,
     "random": policy_random,
     "first": policy_first,
     "last": policy_last,
