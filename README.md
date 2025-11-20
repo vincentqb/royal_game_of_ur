@@ -18,6 +18,7 @@ uvx ruff check --fix .
 uvx ty check
 uvx codespell
 
+uv python install 3.14.0
 uv venv
 source .venv/bin/activate
 uv pip install .
