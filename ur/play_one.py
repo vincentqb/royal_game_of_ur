@@ -88,8 +88,8 @@ if __name__ == "__main__":
     play(
         [
             "human",
+            # "human",
             "urnet_00350",
         ],
         show=True,
     )
-    # play(["human", "human"], show=True)
