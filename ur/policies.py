@@ -260,5 +260,4 @@ POLICIES = {
     "last": policy_last,
     "aggressive": policy_aggressive,
     "urnet_00350": lambda **kwargs: policy_neural(path="experiments/20251111_181533/checkpoint_00350.pt", **kwargs),
-    "urnet_00850": lambda **kwargs: policy_neural(path="experiments/20251111_181533/checkpoint_00850.pt", **kwargs),
 }
